@@ -1,0 +1,28 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "odysseia-dojo",
+	"main": "./src/worker.ts",
+	"compatibility_date": "2026-08-20",
+	"workers_dev": false,
+	"preview_urls": false,
+	"send_metrics": false,
+	"dependencies_instrumentation": {
+		"enabled": false
+	},
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"run_worker_first": true,
+		"not_found_handling": "404-page"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "odysseia-dojo",
+			"migrations_dir": "migrations"
+		}
+	],
+	"secrets": {
+		"required": ["SESSION_SECRET"]
+	}
+}

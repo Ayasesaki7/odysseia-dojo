@@ -53,12 +53,17 @@ operational checks.
 npm run test
 npm run check
 npm run build
+npm run test:worker
 npm run validate
 ```
 
 `check` and `build` always reassemble fixtures. The production build validation
 checks stable fixture URLs, protected fixture assets, and generated Pagefind
 fragments, while rejecting archive, question-bank, sitemap, and RSS outputs.
+`test:worker` starts the generated Worker with its real Static Assets and
+isolated D1 bindings, then exercises the deployed boundary with fixtures. See
+[`docs/worker-test-seam.md`](docs/worker-test-seam.md) for the fresh-checkout
+command and the test-only Discord outbound boundary.
 
 The fixture corpus is deliberately non-sensitive. It contains tutorial and
 extension examples, Chinese and English search terms, an outdated page, optional

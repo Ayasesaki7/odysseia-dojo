@@ -1,7 +1,13 @@
 import { defineConfig } from 'astro/config';
+import cloudflare from '@astrojs/cloudflare';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
+	output: 'server',
+	session: false,
+	adapter: cloudflare({
+		configPath: './wrangler.jsonc',
+	}),
 	integrations: [
 		starlight({
 			title: '类脑 Odysseia - 道馆挑战',

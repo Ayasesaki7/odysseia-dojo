@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = resolve(dirname(scriptPath), '..');
-const outputRoot = resolve(projectRoot, 'dist');
+const outputRoot = resolve(projectRoot, 'dist/client');
 
 async function walk(root) {
 	const entries = await readdir(root, { withFileTypes: true });
