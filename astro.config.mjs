@@ -12,6 +12,15 @@ export default defineConfig({
 		starlight({
 			title: '类脑 Odysseia - 道馆挑战',
 			description: '面向类脑 Odysseia 社区的教程站。',
+			locales: {
+				root: {
+					label: '简体中文',
+					lang: 'zh-CN',
+				},
+			},
+			components: {
+				PageTitle: './src/components/ProtectedPageTitle.astro',
+			},
 			sidebar: [
 				{
 					label: '基础教程',

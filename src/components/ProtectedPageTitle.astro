@@ -1,0 +1,53 @@
+---
+const { category, isOutdated, title } = Astro.locals.starlightRoute.entry.data;
+const categoryLabel = category === 'tutorial' ? '基础教程' : '扩展阅读';
+const categoryScope = category === 'tutorial' ? '基础教程属于答题范围。' : '扩展阅读不属于答题范围。';
+---
+
+<div class="dojo-doc-heading" data-content-category={category}>
+	<p class="dojo-doc-category">{categoryLabel}</p>
+	<h1 id="_top">{title}</h1>
+	<p class="dojo-doc-scope">{categoryScope}</p>
+	{
+		isOutdated && (
+			<aside class="dojo-outdated-notice" data-outdated-notice role="note">
+				本文部分内容可能已经过时，请结合当前界面和最新说明阅读。
+			</aside>
+		)
+	}
+</div>
+
+<style>
+	@layer starlight.core {
+		.dojo-doc-heading h1 {
+			margin-top: 0.25rem;
+			font-size: var(--sl-text-h1);
+			line-height: var(--sl-line-height-headings);
+			font-weight: 600;
+			color: var(--sl-color-white);
+		}
+
+		.dojo-doc-category,
+		.dojo-doc-scope {
+			margin: 0;
+		}
+
+		.dojo-doc-category {
+			color: var(--sl-color-text-accent);
+			font-size: var(--sl-text-sm);
+			font-weight: 700;
+		}
+
+		.dojo-doc-scope {
+			color: var(--sl-color-gray-2);
+		}
+
+		.dojo-outdated-notice {
+			margin-top: 1rem;
+			border-inline-start: 0.25rem solid var(--sl-color-orange);
+			padding: 0.75rem 1rem;
+			background: var(--sl-color-orange-low);
+			color: var(--sl-color-text);
+		}
+	}
+</style>

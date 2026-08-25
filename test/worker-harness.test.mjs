@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createTestHarness } from 'wrangler';
 import { decodeJwt } from 'jose';
@@ -33,6 +33,7 @@ const harness = createTestHarness({
 });
 
 const worker = harness.getWorker();
+let harnessUrl;
 
 function responseCookies(response) {
 	if (typeof response.headers.getSetCookie === 'function') return response.headers.getSetCookie();
@@ -152,9 +153,39 @@ function memberResponder({ guildPages = [[{ id: TEST_DISCORD_GUILD_ID }]], usern
 	};
 }
 
+async function searchPagefind(query, cookie) {
+	const originalFetch = globalThis.fetch;
+	const requestedUrls = [];
+	globalThis.fetch = async (input, init) => {
+		const request = new Request(input, init);
+		const url = new URL(request.url, harnessUrl);
+		requestedUrls.push(url.toString());
+		if (url.origin !== harnessUrl.origin || !url.pathname.startsWith('/pagefind/')) {
+			return originalFetch(input, init);
+		}
+		const headers = new Headers(request.headers);
+		headers.set('Cookie', cookie);
+		return harness.fetch(`${url.pathname}${url.search}`, { headers });
+	};
+
+	const moduleUrl = `${pathToFileURL(resolve(projectRoot, 'dist/client/pagefind/pagefind.js')).href}?test=${Date.now()}-${Math.random()}`;
+	try {
+		const pagefind = await import(moduleUrl);
+		await pagefind.options({ basePath: new URL('/pagefind/', harnessUrl).toString() });
+		const result = await pagefind.search(query);
+		const firstResult = result.results[0] ? await result.results[0].data() : undefined;
+		await pagefind.destroy();
+		return { result, firstResult };
+	} catch (error) {
+		throw new Error(`${error.message}\nPagefind requested: ${requestedUrls.join(', ')}`, { cause: error });
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+}
+
 describe('production Worker test seam', { concurrency: false }, () => {
 	before(async () => {
-		await harness.listen();
+		harnessUrl = (await harness.listen()).url;
 	});
 
 	afterEach(async () => {
@@ -418,6 +449,68 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(resource.status, 200);
 		assert.equal(resource.headers.get('cache-control'), 'private, no-store, max-age=0');
 		assert.match(await resource.text(), /<svg/u);
+	});
+
+	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
+		const headers = { Cookie: await signedSessionCookie() };
+		const [tutorial, extension, outdated, resourcePage] = await Promise.all([
+			harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers }),
+			harness.fetch('/docs/extensions/account-safety/', { headers }),
+			harness.fetch('/docs/extensions/legacy-interface/', { headers }),
+			harness.fetch('/docs/tutorials/sillytavern-api/', { headers }),
+		]);
+		assert.equal(tutorial.status, 200);
+		assert.equal(extension.status, 200);
+		assert.equal(outdated.status, 200);
+		assert.equal(resourcePage.status, 200);
+
+		const tutorialBody = await tutorial.text();
+		assert.match(tutorialBody, /<html lang="zh-CN"/u);
+		assert.match(tutorialBody, /<nav class="sidebar/u);
+		assert.match(tutorialBody, /基础教程/u);
+		assert.match(tutorialBody, /扩展阅读/u);
+		assert.match(tutorialBody, /aria-current="page"/u);
+		assert.match(tutorialBody, /right-sidebar/u);
+		assert.match(tutorialBody, /rel="prev"/u);
+		assert.match(tutorialBody, /rel="next"/u);
+		assert.match(tutorialBody, /class="sl-anchor-link"/u);
+		assert.match(tutorialBody, /<details>/u);
+		assert.match(tutorialBody, /<summary>可选：进一步了解<\/summary>/u);
+		assert.match(tutorialBody, /starlight-menu-button/u);
+		assert.match(tutorialBody, /starlight-theme-select/u);
+		assert.match(tutorialBody, /data-content-category="tutorial"/u);
+		assert.match(tutorialBody, /基础教程属于答题范围/u);
+
+		const extensionBody = await extension.text();
+		assert.match(extensionBody, /data-content-category="extension"/u);
+		assert.match(extensionBody, /扩展阅读不属于答题范围/u);
+
+		const outdatedBody = await outdated.text();
+		assert.match(outdatedBody, /data-outdated-notice/u);
+		assert.match(outdatedBody, /本文部分内容可能已经过时，请结合当前界面和最新说明阅读。/u);
+
+		const resourceBody = await resourcePage.text();
+		assert.match(resourceBody, /src="\/protected\/tutorial-images\/fixture-api-settings\.svg"/u);
+		assert.match(resourceBody, /href="\/protected\/attachments\/fixture-reading-checklist\.txt"/u);
+		assert.doesNotMatch(resourceBody, /_astro\/[^"']*fixture-api-settings/u);
+		assert.match(resourceBody, /（图）/u);
+	});
+
+	test('protects the Pagefind bundle and returns fixture matches for Chinese, product, acronym, and details terms', async () => {
+		const anonymous = await harness.fetch('/pagefind/pagefind.js');
+		assert.equal(anonymous.status, 401);
+		assert.equal(anonymous.headers.get('cache-control'), 'no-store');
+
+		const cookie = await signedSessionCookie();
+		const authenticated = await harness.fetch('/pagefind/pagefind.js', { headers: { Cookie: cookie } });
+		assert.equal(authenticated.status, 200);
+		assert.equal(authenticated.headers.get('cache-control'), 'private, no-store, max-age=0');
+
+		for (const query of ['道馆', 'SillyTavern', 'API', 'fixture fragment']) {
+			const { result, firstResult } = await searchPagefind(query, cookie);
+			assert.ok(result.results.length > 0, `Expected Pagefind fixture results for ${query}.`);
+			assert.match(new URL(firstResult?.url ?? '/', harnessUrl).pathname, /^\/docs\/(?:tutorials|extensions)\//u);
+		}
 	});
 
 	test('rejects a tampered token before static assets are fetched', async () => {

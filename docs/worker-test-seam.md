@@ -18,8 +18,12 @@ The black-box tests use only HTTP requests through that harness. They cover an
 anonymous public page and static asset, protected document and resource routes,
 accepted, tampered, and expired sessions, the Discord OAuth start/callback/
 logout routes, return-target validation, distinct failure states, and D1 OAuth
-activity effects. The test signer and its fixed secret live only under
-`test/support/`; production code only receives configured secrets.
+activity effects. Authenticated reading checks also exercise the native
+Starlight navigation and page features. The Pagefind check loads the generated
+bundle against the same Worker URL, verifies its bundle is protected, and
+searches fixture Chinese, product, acronym, and `<details>` terms. The test
+signer and its fixed secret live only under `test/support/`; production code
+only receives configured secrets.
 
 ## Discord boundary
 

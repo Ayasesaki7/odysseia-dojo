@@ -19,3 +19,5 @@ sidebar:
 ![公开 fixture 的 API 设置示意图，标出非敏感的地址和密钥占位区域](/protected/tutorial-images/fixture-api-settings.svg)
 
 可下载的 [fixture 阅读清单](/protected/attachments/fixture-reading-checklist.txt) 用于验证附件路径。
+
+（图）

@@ -13,6 +13,7 @@ type ProtectedRequestKind = 'document' | 'resource';
 
 function protectedRequestKind(pathname: string): ProtectedRequestKind | undefined {
 	if (/^\/docs\/(?:tutorials|extensions)(?:\/|$)/u.test(pathname)) return 'document';
+	if (/^\/pagefind(?:\/|$)/u.test(pathname)) return 'resource';
 	if (/^\/protected\/(?:tutorial-images|attachments)(?:\/|$)/u.test(pathname)) return 'resource';
 }
 
