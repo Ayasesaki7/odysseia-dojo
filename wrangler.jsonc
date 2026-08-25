@@ -22,7 +22,10 @@
 			"migrations_dir": "migrations"
 		}
 	],
+	"vars": {
+		"DISCORD_GUILD_ID": "1134557553011998840"
+	},
 	"secrets": {
-		"required": ["SESSION_SECRET"]
+		"required": ["SESSION_SECRET", "DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_REDIRECT_URI"]
 	}
 }

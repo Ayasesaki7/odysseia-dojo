@@ -1,8 +1,11 @@
-import { jwtVerify, type JWTPayload } from 'jose';
+import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 
+import { readCookie, secureCookie } from './cookies';
 import { SESSION_COOKIE_NAME } from './session-contract.js';
 
 export { SESSION_COOKIE_NAME } from './session-contract.js';
+
+export const SESSION_DURATION_SECONDS = 8 * 24 * 60 * 60;
 
 export interface SessionClaims extends JWTPayload {
 	discordUserId: string;
@@ -12,22 +15,6 @@ export interface SessionClaims extends JWTPayload {
 }
 
 const encoder = new TextEncoder();
-
-function readCookie(request: Request, name: string): string | undefined {
-	const cookieHeader = request.headers.get('Cookie');
-	if (!cookieHeader) return undefined;
-
-	for (const item of cookieHeader.split(';')) {
-		const [cookieName, ...valueParts] = item.trim().split('=');
-		if (cookieName !== name || valueParts.length === 0) continue;
-
-		try {
-			return decodeURIComponent(valueParts.join('='));
-		} catch {
-			return undefined;
-		}
-	}
-}
 
 function sessionKey(secret: string): Uint8Array {
 	const key = encoder.encode(secret);
@@ -46,6 +33,38 @@ function isSessionClaims(payload: JWTPayload): payload is SessionClaims {
 		typeof payload.guildVerifiedAt === 'number' &&
 		Number.isFinite(payload.guildVerifiedAt)
 	);
+}
+
+function randomSessionNonce(): string {
+	const bytes = crypto.getRandomValues(new Uint8Array(32));
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
+}
+
+export async function issueSession(
+	identity: Pick<SessionClaims, 'discordUserId' | 'discordUsername'>,
+	secret: string
+): Promise<string> {
+	const issuedAt = Math.floor(Date.now() / 1_000);
+	return new SignJWT({
+		discordUserId: identity.discordUserId,
+		discordUsername: identity.discordUsername,
+		sessionNonce: randomSessionNonce(),
+		guildVerifiedAt: issuedAt,
+	})
+		.setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+		.setIssuedAt(issuedAt)
+		.setExpirationTime(issuedAt + SESSION_DURATION_SECONDS)
+		.sign(sessionKey(secret));
+}
+
+export function sessionCookie(token: string): string {
+	return secureCookie(SESSION_COOKIE_NAME, token, SESSION_DURATION_SECONDS);
+}
+
+export function clearSessionCookie(): string {
+	return secureCookie(SESSION_COOKIE_NAME, '', 0);
 }
 
 export async function verifySession(request: Request, secret: string): Promise<SessionClaims> {

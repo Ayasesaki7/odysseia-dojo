@@ -4,16 +4,14 @@ import PublicLayout from '../components/PublicLayout.astro';
 
 <PublicLayout
 	title="访问资格 | 类脑 Odysseia - 道馆挑战"
-	description="受保护教程访问资格的公开说明。"
+		description="未通过 Discord 成员验证时的访问资格说明。"
 >
 	<main class="public-shell narrow-shell">
 		<section aria-labelledby="access-title">
 			<p class="eyebrow">受保护教程阅读</p>
-			<h1 id="access-title">暂时无法确认访问资格</h1>
-			<p>
-				此公开页面为访问资格提示保留入口。具体的成员验证、授权取消和 Discord 临时故障状态将在登录流程启用后分别显示。
-			</p>
-			<a class="button button-secondary" href="/login">返回登录入口</a>
-		</section>
-	</main>
+				<h1 id="access-title">您不在类脑 ODYSSEIA 服务器，请先加入。</h1>
+				<p>完成加入后，可重新验证 Discord 成员资格。</p>
+				<a class="button button-secondary" href="/api/auth/discord">重新验证</a>
+			</section>
+		</main>
 </PublicLayout>

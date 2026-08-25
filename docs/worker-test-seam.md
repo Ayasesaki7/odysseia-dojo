@@ -16,16 +16,16 @@ external Discord request is needed.
 
 The black-box tests use only HTTP requests through that harness. They cover an
 anonymous public page and static asset, protected document and resource routes,
-an accepted test-only signed session, a tampered session, the provisional
-dynamic authentication entrypoint, the scheduled handler, and D1 availability.
-The test signer and its fixed secret live only under `test/support/`; production
-code only verifies the configured `SESSION_SECRET`.
+accepted, tampered, and expired sessions, the Discord OAuth start/callback/
+logout routes, return-target validation, distinct failure states, and D1 OAuth
+activity effects. The test signer and its fixed secret live only under
+`test/support/`; production code only receives configured secrets.
 
 ## Discord boundary
 
 Wrangler's test harness sends Worker outbound `fetch()` calls through the Node
-test process's `globalThis.fetch`. Future Discord tests replace that function
-with a strict local responder before starting a harness, so they can model
-member, non-member, pagination, refusal, and failure responses without network
-access. `worker-harness.test.mjs` proves this with a test-only Worker probe; it
-does not add OAuth behavior to the deployed site.
+test process's `globalThis.fetch`. The OAuth tests replace that function with a
+strict local responder, so they model member, non-member, Guild pagination,
+refusal, and failure responses without network access. Harness runtime logs and
+the isolated D1 binding prove that access tokens, Cookies, Secrets, and full
+Discord responses do not persist or appear in the fail-open activity-write log.

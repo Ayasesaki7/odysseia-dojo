@@ -4,22 +4,153 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createTestHarness } from 'wrangler';
+import { decodeJwt } from 'jose';
 
 import { signedSessionCookie, TEST_SESSION_SECRET } from './support/session.mjs';
+
+const TEST_DISCORD_CLIENT_ID = 'test-discord-client-id';
+const TEST_DISCORD_CLIENT_SECRET = 'test-discord-client-secret';
+const TEST_DISCORD_REDIRECT_URI = 'https://dojo.test/api/auth/callback';
+const TEST_DISCORD_GUILD_ID = '1134557553011998840';
+const TEST_DISCORD_ACCESS_TOKEN = 'test-discord-access-token';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '..');
 const harness = createTestHarness({
 	root: projectRoot,
 	workers: [
-		{
-			configPath: './dist/server/wrangler.json',
-			secrets: { SESSION_SECRET: TEST_SESSION_SECRET },
-		},
+			{
+				configPath: './dist/server/wrangler.json',
+				secrets: {
+					SESSION_SECRET: TEST_SESSION_SECRET,
+					DISCORD_CLIENT_ID: TEST_DISCORD_CLIENT_ID,
+					DISCORD_CLIENT_SECRET: TEST_DISCORD_CLIENT_SECRET,
+					DISCORD_REDIRECT_URI: TEST_DISCORD_REDIRECT_URI,
+					DISCORD_GUILD_ID: TEST_DISCORD_GUILD_ID,
+				},
+			},
 	],
 });
 
 const worker = harness.getWorker();
+
+function responseCookies(response) {
+	if (typeof response.headers.getSetCookie === 'function') return response.headers.getSetCookie();
+	const header = response.headers.get('set-cookie');
+	return header ? header.split(/,(?=\s*[^;\s]+=)/u) : [];
+}
+
+function responseCookie(response, name) {
+	const cookie = responseCookies(response).find((value) => value.startsWith(`${name}=`));
+	assert.ok(cookie, `Expected ${name} to be set.`);
+	return cookie;
+}
+
+function cookiePair(cookie) {
+	return cookie.split(';', 1)[0];
+}
+
+function cookieValue(cookie) {
+	return decodeURIComponent(cookiePair(cookie).slice(cookiePair(cookie).indexOf('=') + 1));
+}
+
+function locationPath(response) {
+	const location = response.headers.get('location');
+	assert.ok(location, 'Expected a redirect location.');
+	const url = new URL(location, 'https://worker.test');
+	return `${url.pathname}${url.search}${url.hash}`;
+}
+
+async function beginOAuth(returnTo = '/docs/tutorials/') {
+	const url = new URL('https://worker.test/api/auth/discord');
+	url.searchParams.set('returnTo', returnTo);
+	const response = await harness.fetch(`${url.pathname}${url.search}`, { redirect: 'manual' });
+	assert.equal(response.status, 302);
+	const authorizationUrl = new URL(response.headers.get('location'));
+	const state = authorizationUrl.searchParams.get('state');
+	assert.ok(state, 'OAuth authorization URL must include state.');
+	return {
+		authorizationUrl,
+		response,
+		state,
+		stateCookie: cookiePair(responseCookie(response, 'dojo_oauth_state')),
+	};
+}
+
+async function finishOAuth(start, params = {}) {
+	const callbackUrl = new URL('https://worker.test/api/auth/callback');
+	callbackUrl.searchParams.set('state', params.state ?? start.state);
+	for (const [name, value] of Object.entries(params)) {
+		if (name !== 'state' && value !== undefined) callbackUrl.searchParams.set(name, value);
+	}
+	return harness.fetch(`${callbackUrl.pathname}${callbackUrl.search}`, {
+		redirect: 'manual',
+		headers: { Cookie: start.stateCookie },
+	});
+}
+
+async function createAuthActivityTable() {
+	const env = await worker.getEnv();
+	await worker.applyD1Migrations('DB');
+	return env;
+}
+
+function jsonResponse(value, status = 200) {
+	return new Response(JSON.stringify(value), {
+		status,
+		headers: { 'content-type': 'application/json' },
+	});
+}
+
+async function withDiscordResponder(responder, action) {
+	const originalFetch = globalThis.fetch;
+	const requests = [];
+	globalThis.fetch = async (input, init) => {
+		const request = new Request(input, init);
+		if (new URL(request.url).origin !== 'https://discord.com') return originalFetch(input, init);
+		requests.push(request);
+		return responder(request, requests);
+	};
+
+	try {
+		return await action(requests);
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+}
+
+function memberResponder({ guildPages = [[{ id: TEST_DISCORD_GUILD_ID }]], username = 'fixture-member' } = {}) {
+	let guildPage = 0;
+	return async (request) => {
+		const url = new URL(request.url);
+		if (url.pathname === '/api/v10/oauth2/token') {
+			assert.equal(request.method, 'POST');
+			assert.match(request.headers.get('authorization') ?? '', /^Basic /u);
+			assert.equal(request.headers.get('content-type'), 'application/x-www-form-urlencoded');
+			assert.equal(
+				await request.text(),
+				new URLSearchParams({
+					grant_type: 'authorization_code',
+					code: 'fixture-authorization-code',
+					redirect_uri: TEST_DISCORD_REDIRECT_URI,
+				}).toString()
+			);
+			return jsonResponse({ access_token: TEST_DISCORD_ACCESS_TOKEN, token_type: 'Bearer' });
+		}
+		if (url.pathname === '/api/v10/users/@me') {
+			assert.equal(request.headers.get('authorization'), `Bearer ${TEST_DISCORD_ACCESS_TOKEN}`);
+			return jsonResponse({ id: '123456789012345678', username });
+		}
+		if (url.pathname === '/api/v10/users/@me/guilds') {
+			assert.equal(request.headers.get('authorization'), `Bearer ${TEST_DISCORD_ACCESS_TOKEN}`);
+			assert.equal(url.searchParams.get('limit'), '200');
+			const page = guildPages[guildPage++];
+			assert.ok(page, 'Unexpected extra guild-page request.');
+			return jsonResponse(page);
+		}
+		throw new Error(`Unexpected Discord request: ${request.method} ${url.pathname}`);
+	};
+}
 
 describe('production Worker test seam', { concurrency: false }, () => {
 	before(async () => {
@@ -46,14 +177,18 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	});
 
 	test('serves disclosure and login skeletons without a session or observation request', async () => {
-		const [home, login, accessDenied] = await Promise.all([
+		const [home, login, accessDenied, cancelled, unavailable] = await Promise.all([
 			harness.fetch('/'),
 			harness.fetch('/login'),
 			harness.fetch('/access-denied'),
+			harness.fetch('/auth-cancelled'),
+			harness.fetch('/discord-unavailable'),
 		]);
 		assert.equal(home.status, 200);
 		assert.equal(login.status, 200);
 		assert.equal(accessDenied.status, 200);
+		assert.equal(cancelled.status, 200);
+		assert.equal(unavailable.status, 200);
 		assert.equal(home.headers.get('set-cookie'), null);
 		assert.equal(login.headers.get('set-cookie'), null);
 		assert.equal(accessDenied.headers.get('set-cookie'), null);
@@ -76,14 +211,182 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(loginBody, /首页隐私说明/u);
 		assert.doesNotMatch(loginBody, /type="checkbox"/u);
 
-		assert.match(await accessDenied.text(), /暂时无法确认访问资格/u);
+		assert.match(await accessDenied.text(), /您不在类脑 ODYSSEIA 服务器，请先加入。/u);
+		assert.match(await cancelled.text(), /Discord 授权未完成，无法验证您的访问资格。/u);
+		assert.match(await unavailable.text(), /暂时无法连接 Discord，请稍后重试。/u);
 	});
 
-	test('routes the provisional authentication endpoint through the deployed Worker', async () => {
-		const response = await harness.fetch('/api/auth/discord');
-		assert.equal(response.status, 501);
+	test('starts a constrained Discord OAuth flow with a short-lived protected state cookie', async () => {
+		const start = await beginOAuth('/docs/tutorials/discord-and-odysseia/?source=login#search-terms');
+
+		assert.equal(start.authorizationUrl.origin, 'https://discord.com');
+		assert.equal(start.authorizationUrl.pathname, '/oauth2/authorize');
+		assert.equal(start.authorizationUrl.searchParams.get('client_id'), TEST_DISCORD_CLIENT_ID);
+		assert.equal(start.authorizationUrl.searchParams.get('redirect_uri'), TEST_DISCORD_REDIRECT_URI);
+		assert.equal(start.authorizationUrl.searchParams.get('response_type'), 'code');
+		assert.equal(start.authorizationUrl.searchParams.get('scope'), 'identify guilds');
+		assert.ok(start.state.length >= 43, 'OAuth state must contain at least 256 bits of encoded randomness.');
+		assert.equal(start.authorizationUrl.searchParams.has('bot'), false);
+		assert.equal(start.authorizationUrl.searchParams.has('applications.commands'), false);
+		assert.equal(start.response.headers.get('cache-control'), 'no-store');
+
+		const stateCookie = responseCookie(start.response, 'dojo_oauth_state');
+		assert.match(stateCookie, /HttpOnly/u);
+		assert.match(stateCookie, /Secure/u);
+		assert.match(stateCookie, /SameSite=Lax/u);
+		assert.match(stateCookie, /Path=\//u);
+		assert.match(stateCookie, /Max-Age=600/u);
+	});
+
+	test('issues a fixed session after identity and paginated Guild membership verification', async () => {
+		const env = await createAuthActivityTable();
+		const firstPage = Array.from({ length: 200 }, (_, index) => ({ id: String(index + 1) }));
+		const start = await beginOAuth('/docs/tutorials/discord-and-odysseia/?source=login#search-terms');
+
+		const response = await withDiscordResponder(
+			memberResponder({ guildPages: [firstPage, [{ id: TEST_DISCORD_GUILD_ID }]] }),
+			async (requests) => {
+				const callback = await finishOAuth(start, { code: 'fixture-authorization-code' });
+				const guildRequests = requests.filter((request) => new URL(request.url).pathname.endsWith('/users/@me/guilds'));
+				assert.equal(guildRequests.length, 2);
+				assert.equal(new URL(guildRequests[1].url).searchParams.get('after'), '200');
+				return callback;
+			}
+		);
+
+		assert.equal(response.status, 302);
+		assert.equal(locationPath(response), '/docs/tutorials/discord-and-odysseia/?source=login#search-terms');
 		assert.equal(response.headers.get('cache-control'), 'no-store');
-		assert.match(await response.text(), /not configured yet/u);
+
+		const sessionCookie = responseCookie(response, 'dojo_session');
+		assert.match(sessionCookie, /HttpOnly/u);
+		assert.match(sessionCookie, /Secure/u);
+		assert.match(sessionCookie, /SameSite=Lax/u);
+		assert.match(sessionCookie, /Path=\//u);
+		assert.match(sessionCookie, /Max-Age=691200/u);
+		const claims = decodeJwt(cookieValue(sessionCookie));
+		assert.equal(claims.discordUserId, '123456789012345678');
+		assert.equal(claims.discordUsername, 'fixture-member');
+		assert.equal(typeof claims.sessionNonce, 'string');
+		assert.ok(claims.sessionNonce.length >= 43);
+		assert.equal(typeof claims.guildVerifiedAt, 'number');
+		assert.equal(claims.exp - claims.iat, 691200);
+
+		const clearedState = responseCookie(response, 'dojo_oauth_state');
+		assert.match(clearedState, /Max-Age=0/u);
+
+		const storedActivity = await env.DB.prepare(
+			'SELECT discord_user_id, discord_username_snapshot, last_successful_oauth_at FROM auth_activity'
+		).first();
+		assert.deepEqual(storedActivity?.discord_user_id, '123456789012345678');
+		assert.deepEqual(storedActivity?.discord_username_snapshot, 'fixture-member');
+		assert.match(storedActivity?.last_successful_oauth_at ?? '', /^\d{4}-\d{2}-\d{2}T/u);
+		assert.doesNotMatch(JSON.stringify(storedActivity), /test-discord-access-token|dojo_session|test-session-secret/u);
+	});
+
+	test('rejects missing or mismatched OAuth state before any Discord request', async () => {
+		const start = await beginOAuth();
+		await withDiscordResponder(
+			async () => {
+				throw new Error('Discord must not be reached for an invalid state.');
+			},
+			async (requests) => {
+				const missing = await harness.fetch('/api/auth/callback?code=fixture-authorization-code', {
+					redirect: 'manual',
+					headers: { Cookie: start.stateCookie },
+				});
+				assert.equal(missing.status, 400);
+				assert.equal(missing.headers.get('cache-control'), 'no-store');
+				assert.match(responseCookie(missing, 'dojo_oauth_state'), /Max-Age=0/u);
+
+				const mismatched = await finishOAuth(start, {
+					code: 'fixture-authorization-code',
+					state: 'wrong-state',
+				});
+				assert.equal(mismatched.status, 400);
+				assert.match(responseCookie(mismatched, 'dojo_oauth_state'), /Max-Age=0/u);
+				assert.equal(requests.length, 0);
+			}
+		);
+	});
+
+	test('distinguishes a declined authorization, a non-member, and a Discord failure', async () => {
+		const declinedStart = await beginOAuth();
+		const declined = await finishOAuth(declinedStart, { error: 'access_denied' });
+		assert.equal(declined.status, 302);
+		assert.equal(locationPath(declined), '/auth-cancelled');
+
+		const nonMemberStart = await beginOAuth();
+		const nonMember = await withDiscordResponder(
+			memberResponder({ guildPages: [[]] }),
+			() => finishOAuth(nonMemberStart, { code: 'fixture-authorization-code' })
+		);
+		assert.equal(nonMember.status, 302);
+		assert.equal(locationPath(nonMember), '/access-denied');
+		assert.match(responseCookie(nonMember, 'dojo_session'), /Max-Age=0/u);
+
+		const failedStart = await beginOAuth();
+		const failed = await withDiscordResponder(
+			async (request) => {
+				assert.equal(new URL(request.url).pathname, '/api/v10/oauth2/token');
+				return new Response('Discord is unavailable', { status: 503 });
+			},
+			() => finishOAuth(failedStart, { code: 'fixture-authorization-code' })
+		);
+		assert.equal(failed.status, 302);
+		assert.equal(locationPath(failed), '/discord-unavailable');
+	});
+
+	test('falls back to the tutorial root for unsafe OAuth return targets', async () => {
+		await createAuthActivityTable();
+		for (const unsafeReturnTo of [
+			'//example.invalid/steal',
+			'https://example.invalid/steal',
+			'/docs/other/',
+			'/public/',
+		]) {
+			const start = await beginOAuth(unsafeReturnTo);
+			const response = await withDiscordResponder(
+				memberResponder(),
+				() => finishOAuth(start, { code: 'fixture-authorization-code' })
+			);
+			assert.equal(locationPath(response), '/docs/tutorials/', unsafeReturnTo);
+		}
+	});
+
+	test('keeps a verified member signed in when only the OAuth activity upsert fails', async () => {
+		const env = await worker.getEnv();
+		await env.DB.prepare('DROP TABLE IF EXISTS auth_activity').run();
+		const start = await beginOAuth();
+		harness.clearLogs();
+		const response = await withDiscordResponder(
+			memberResponder(),
+			() => finishOAuth(start, { code: 'fixture-authorization-code' })
+		);
+		assert.equal(response.status, 302);
+		assert.equal(locationPath(response), '/docs/tutorials/');
+		assert.ok(responseCookies(response).some((cookie) => cookie.startsWith('dojo_session=')));
+		const errors = harness
+			.getLogs()
+			.filter((log) => log.level === 'error')
+			.map((log) => log.message);
+		assert.deepEqual(errors, ['Unable to record OAuth activity.']);
+		assert.doesNotMatch(errors.join('\n'), /test-discord-access-token|dojo_session|test-session-secret|123456789012345678/u);
+	});
+
+	test('clears the fixed session cookie at logout', async () => {
+		const response = await harness.fetch('/api/auth/logout', {
+			redirect: 'manual',
+			headers: { Cookie: await signedSessionCookie() },
+		});
+		assert.equal(response.status, 302);
+		assert.equal(locationPath(response), '/');
+		const cookie = responseCookie(response, 'dojo_session');
+		assert.match(cookie, /HttpOnly/u);
+		assert.match(cookie, /Secure/u);
+		assert.match(cookie, /SameSite=Lax/u);
+		assert.match(cookie, /Path=\//u);
+		assert.match(cookie, /Max-Age=0/u);
 	});
 
 	test('fails closed for anonymous protected document and resource requests', async () => {
@@ -126,6 +429,18 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(response.status, 401);
 		assert.equal(response.headers.get('cache-control'), 'no-store');
 		assert.doesNotMatch(await response.text(), /Fixture protected attachment/u);
+	});
+
+	test('rejects an expired token before protected documents are fetched', async () => {
+		const cookie = await signedSessionCookie({ expirationTime: Math.floor(Date.now() / 1_000) - 60 });
+		const response = await harness.fetch('/docs/tutorials/discord-and-odysseia/', {
+			redirect: 'manual',
+			headers: { Cookie: cookie },
+		});
+
+		assert.equal(response.status, 302);
+		assert.equal(locationPath(response), '/login?returnTo=%2Fdocs%2Ftutorials%2Fdiscord-and-odysseia%2F');
+		assert.equal(response.headers.get('cache-control'), 'no-store');
 	});
 
 	test('provides isolated D1 and invokes the deployed scheduled entrypoint', async () => {

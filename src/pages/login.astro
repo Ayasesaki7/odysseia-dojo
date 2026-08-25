@@ -1,5 +1,9 @@
 ---
 import PublicLayout from '../components/PublicLayout.astro';
+
+const requestedReturnTo = Astro.url.searchParams.get('returnTo');
+const oauthUrl = new URL('/api/auth/discord', Astro.url);
+if (requestedReturnTo) oauthUrl.searchParams.set('returnTo', requestedReturnTo);
 ---
 
 <PublicLayout
@@ -19,8 +23,19 @@ import PublicLayout from '../components/PublicLayout.astro';
 					这些信号并不用于单一自动评分、处罚或封禁；完整的采集内容、HMAC 处理、保留期限和删除渠道见<a href="/#privacy">首页隐私说明</a>。
 				</p>
 			</div>
-			<a class="button" href="/api/auth/discord">使用 Discord 登录</a>
-			<p class="muted">Discord 登录状态和失败处理将在登录流程启用后提供。</p>
-		</section>
-	</main>
+				<a class="button" data-discord-login href={`${oauthUrl.pathname}${oauthUrl.search}`}>使用 Discord 登录</a>
+				<p class="muted">仅请求 Discord 身份和服务器列表，用于确认成员资格。</p>
+			</section>
+		</main>
+		<script>
+			const loginLink = document.querySelector('[data-discord-login]');
+			const returnTo = new URLSearchParams(window.location.search).get('returnTo');
+			if (loginLink instanceof HTMLAnchorElement && returnTo && window.location.hash) {
+				const target = new URL(returnTo, window.location.origin);
+				target.hash = window.location.hash;
+				const oauth = new URL(loginLink.href);
+				oauth.searchParams.set('returnTo', `${target.pathname}${target.search}${target.hash}`);
+				loginLink.href = oauth.toString();
+			}
+		</script>
 </PublicLayout>
