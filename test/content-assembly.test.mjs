@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 
 import { materializeContent } from '../scripts/content-assembly.mjs';
 
-const allowedRoots = [
+// Independent contract oracle for fixture inputs and observable runtime links.
+// Do not import the assembly module's operational allowlist into these tests.
+const fixtureContractRoots = [
 	'src/content/docs/tutorials',
 	'src/content/docs/extensions',
 	'public/protected/tutorial-images',
@@ -32,7 +34,7 @@ async function makeTree(root, paths) {
 
 async function makeFixtureProject() {
 	const root = await mkdtemp(resolve(tmpdir(), 'odysseia-dojo-fixture-'));
-	await makeTree(root, allowedRoots.map((path) => `fixtures/${path}`));
+	await makeTree(root, fixtureContractRoots.map((path) => `fixtures/${path}`));
 	return root;
 }
 
@@ -81,7 +83,7 @@ async function availablePort() {
 test('fixtures replace a local materialization with tracked fixture files', async () => {
 	const root = await makeFixtureProject();
 	const privateRoot = resolve(root, 'private-content');
-	await makeTree(privateRoot, allowedRoots);
+	await makeTree(privateRoot, fixtureContractRoots);
 	await materializeContent('local', { projectRoot: root, privateContentRoot: privateRoot });
 
 	await materializeContent('fixtures', { projectRoot: root });
@@ -95,18 +97,59 @@ test('fixtures replace a local materialization with tracked fixture files', asyn
 test('local materialization links only the four allowlisted private roots', async () => {
 	const root = await makeFixtureProject();
 	const privateRoot = resolve(root, 'private-content');
-	await makeTree(privateRoot, allowedRoots);
+	await makeTree(privateRoot, fixtureContractRoots);
 	await mkdir(resolve(privateRoot, 'archive'), { recursive: true });
 	await mkdir(resolve(privateRoot, 'question_banks'), { recursive: true });
 	await writeFile(resolve(privateRoot, 'package.json'), '{"private":true}', 'utf8');
 
 	await materializeContent('local', { projectRoot: root, privateContentRoot: privateRoot });
 
-	for (const allowedRoot of allowedRoots) {
-		assert.equal((await lstat(resolve(root, allowedRoot))).isSymbolicLink(), true);
+	for (const contractRoot of fixtureContractRoots) {
+		assert.equal((await lstat(resolve(root, contractRoot))).isSymbolicLink(), true);
 	}
 	await assert.rejects(lstat(resolve(root, 'src/content/docs/archive')));
 	await assert.rejects(lstat(resolve(root, 'public/protected/question_banks')));
+});
+
+test('fixture assembly rejects a symlinked fixture root before materializing runtime content', async (t) => {
+	const linkedProjectRoot = await mkdtemp(resolve(tmpdir(), 'odysseia-dojo-fixture-link-'));
+	const externalFixtureRoot = await mkdtemp(resolve(tmpdir(), 'odysseia-dojo-fixture-source-'));
+	t.after(async () => {
+		await Promise.all([
+			rm(linkedProjectRoot, { recursive: true, force: true }),
+			rm(externalFixtureRoot, { recursive: true, force: true }),
+		]);
+	});
+
+	await makeTree(externalFixtureRoot, fixtureContractRoots);
+	await symlink(externalFixtureRoot, resolve(linkedProjectRoot, 'fixtures'), 'dir');
+	const linkedRuntimeSentinel = resolve(linkedProjectRoot, 'src/content/docs/existing.md');
+	await mkdir(dirname(linkedRuntimeSentinel), { recursive: true });
+	await writeFile(linkedRuntimeSentinel, 'preserve me', 'utf8');
+
+	await assert.rejects(
+		materializeContent('fixtures', { projectRoot: linkedProjectRoot }),
+		/fixture root must be a real directory/u
+	);
+	assert.equal(await readFile(linkedRuntimeSentinel, 'utf8'), 'preserve me');
+});
+
+test('fixture assembly rejects unexpected top-level fixture content before materializing runtime content', async (t) => {
+	const unexpectedRootProject = await makeFixtureProject();
+	t.after(async () => {
+		await rm(unexpectedRootProject, { recursive: true, force: true });
+	});
+
+	await mkdir(resolve(unexpectedRootProject, 'fixtures/archive'), { recursive: true });
+	const unexpectedRuntimeSentinel = resolve(unexpectedRootProject, 'src/content/docs/existing.md');
+	await mkdir(dirname(unexpectedRuntimeSentinel), { recursive: true });
+	await writeFile(unexpectedRuntimeSentinel, 'preserve me', 'utf8');
+
+	await assert.rejects(
+		materializeContent('fixtures', { projectRoot: unexpectedRootProject }),
+		/fixture root must contain only src, public/u
+	);
+	assert.equal(await readFile(unexpectedRuntimeSentinel, 'utf8'), 'preserve me');
 });
 
 test('fixture assembly rejects linked fixture input and unknown source selectors', async () => {

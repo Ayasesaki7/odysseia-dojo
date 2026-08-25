@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const scriptPath = fileURLToPath(import.meta.url);
 export const projectRoot = resolve(dirname(scriptPath), '..');
 
-const allowedRoots = Object.freeze([
+const materializableRootDefinitions = Object.freeze([
 	{
 		path: 'src/content/docs/tutorials',
 		label: 'tutorials',
@@ -26,7 +26,7 @@ const allowedRoots = Object.freeze([
 
 const runtimeRoots = Object.freeze(['src/content/docs', 'public/protected']);
 
-function isWithin(parent, child) {
+function isPathWithin(parent, child) {
 	const pathFromParent = relative(parent, child);
 	return pathFromParent === '' || (!pathFromParent.startsWith(`..${sep}`) && pathFromParent !== '..');
 }
@@ -76,10 +76,17 @@ async function assertNoSymlinks(root, label) {
 
 async function assertFixtureSources(root) {
 	const fixtureRoot = resolve(root, 'fixtures');
-	const docsRoot = resolve(fixtureRoot, 'src/content/docs');
-	const protectedRoot = resolve(fixtureRoot, 'public/protected');
+	const fixtureSourceRoot = resolve(fixtureRoot, 'src');
+	const fixtureContentRoot = resolve(fixtureSourceRoot, 'content');
+	const docsRoot = resolve(fixtureContentRoot, 'docs');
+	const fixturePublicRoot = resolve(fixtureRoot, 'public');
+	const protectedRoot = resolve(fixturePublicRoot, 'protected');
 
+	await assertExactLayout(fixtureRoot, ['src', 'public'], 'fixture root');
+	await assertExactLayout(fixtureSourceRoot, ['content'], 'fixture source root');
+	await assertExactLayout(fixtureContentRoot, ['docs'], 'fixture content root');
 	await assertExactLayout(docsRoot, ['tutorials', 'extensions'], 'fixture docs root');
+	await assertExactLayout(fixturePublicRoot, ['protected'], 'fixture public root');
 	await assertExactLayout(
 		protectedRoot,
 		['tutorial-images', 'attachments'],
@@ -95,7 +102,7 @@ async function assertLocalSources(contentRoot) {
 	const docsRoot = resolve(canonicalContentRoot, 'src/content/docs');
 	const protectedRoot = resolve(canonicalContentRoot, 'public/protected');
 
-	if (!isWithin(canonicalContentRoot, docsRoot) || !isWithin(canonicalContentRoot, protectedRoot)) {
+	if (!isPathWithin(canonicalContentRoot, docsRoot) || !isPathWithin(canonicalContentRoot, protectedRoot)) {
 		throw new Error('The private content roots must remain inside the trusted content repository.');
 	}
 
@@ -106,10 +113,10 @@ async function assertLocalSources(contentRoot) {
 		'private protected-resource root'
 	);
 
-	for (const rootDefinition of allowedRoots) {
+	for (const rootDefinition of materializableRootDefinitions) {
 		const source = resolve(canonicalContentRoot, rootDefinition.path);
 		const canonicalSource = await realpath(source);
-		if (!isWithin(canonicalContentRoot, canonicalSource)) {
+		if (!isPathWithin(canonicalContentRoot, canonicalSource)) {
 			throw new Error(`Allowed ${rootDefinition.label} source resolves outside the private repository.`);
 		}
 		await assertNoSymlinks(canonicalSource, `private ${rootDefinition.label}`);
@@ -125,7 +132,7 @@ async function clearRuntimeRoots(root) {
 }
 
 async function materializeFixtureSources(root, fixtureRoot) {
-	for (const rootDefinition of allowedRoots) {
+	for (const rootDefinition of materializableRootDefinitions) {
 		const source = resolve(fixtureRoot, rootDefinition.path);
 		const destination = resolve(root, rootDefinition.path);
 		await mkdir(dirname(destination), { recursive: true });
@@ -134,7 +141,7 @@ async function materializeFixtureSources(root, fixtureRoot) {
 }
 
 async function materializeLocalSources(root, contentRoot) {
-	for (const rootDefinition of allowedRoots) {
+	for (const rootDefinition of materializableRootDefinitions) {
 		const source = resolve(contentRoot, rootDefinition.path);
 		const destination = resolve(root, rootDefinition.path);
 		await mkdir(dirname(destination), { recursive: true });
