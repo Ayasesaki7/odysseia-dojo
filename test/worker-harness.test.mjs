@@ -45,6 +45,40 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(asset.headers.get('content-type') ?? '', /^image\/svg\+xml/u);
 	});
 
+	test('serves disclosure and login skeletons without a session or observation request', async () => {
+		const [home, login, accessDenied] = await Promise.all([
+			harness.fetch('/'),
+			harness.fetch('/login'),
+			harness.fetch('/access-denied'),
+		]);
+		assert.equal(home.status, 200);
+		assert.equal(login.status, 200);
+		assert.equal(accessDenied.status, 200);
+		assert.equal(home.headers.get('set-cookie'), null);
+		assert.equal(login.headers.get('set-cookie'), null);
+		assert.equal(accessDenied.headers.get('set-cookie'), null);
+
+		const homeBody = await home.text();
+		assert.match(homeBody, /通过 6 个道馆可以把缓冲区缩短一定时间/u);
+		assert.doesNotMatch(homeBody, /缓冲区缩短 144h/u);
+		assert.match(homeBody, /HMAC-SHA256/u);
+		assert.match(homeBody, /活跃业务记录最多保留 90 天/u);
+		assert.match(homeBody, /最多可能额外保留 7 天/u);
+		assert.match(homeBody, /请通过社区联系/u);
+		assert.match(homeBody, /AGPL-3\.0-or-later/u);
+		assert.match(homeBody, /CC BY-NC 4\.0/u);
+		assert.doesNotMatch(homeBody, /api\/fingerprint/u);
+
+		const loginBody = await login.text();
+		const noticeIndex = loginBody.indexOf('登录前请先了解');
+		const loginButtonIndex = loginBody.indexOf('使用 Discord 登录');
+		assert.ok(noticeIndex >= 0 && noticeIndex < loginButtonIndex, 'The notice must precede the OAuth button.');
+		assert.match(loginBody, /首页隐私说明/u);
+		assert.doesNotMatch(loginBody, /type="checkbox"/u);
+
+		assert.match(await accessDenied.text(), /暂时无法确认访问资格/u);
+	});
+
 	test('routes the provisional authentication endpoint through the deployed Worker', async () => {
 		const response = await harness.fetch('/api/auth/discord');
 		assert.equal(response.status, 501);

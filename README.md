@@ -65,6 +65,16 @@ isolated D1 bindings, then exercises the deployed boundary with fixtures. See
 [`docs/worker-test-seam.md`](docs/worker-test-seam.md) for the fresh-checkout
 command and the test-only Discord outbound boundary.
 
+### Production public links
+
+Fixture and local builds intentionally render no fake canonical or source URL.
+Before a production build, set `DEPLOYMENT_MODE=production` together with a
+non-placeholder `PUBLIC_CANONICAL_URL` origin and `PUBLIC_SOURCE_COMMIT_URL`
+that names the full 40-character public commit SHA. The build refuses a
+production-mode build without those values, so a production footer can link to
+the exact deployed program version without implying that tutorial material is
+public.
+
 The fixture corpus is deliberately non-sensitive. It contains tutorial and
 extension examples, Chinese and English search terms, an outdated page, optional
 `<details>` content, and representative protected image and attachment paths.

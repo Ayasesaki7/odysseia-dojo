@@ -1,18 +1,71 @@
 ---
-import '../styles/public.css';
+import PublicLayout from '../components/PublicLayout.astro';
 ---
 
-<!doctype html>
-<html lang="zh-CN">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<title>类脑 Odysseia - 道馆挑战</title>
-	</head>
-	<body>
-		<main class="public-shell">
-			<h1>类脑 Odysseia - 道馆挑战</h1>
-			<p>公开站点入口正在准备中。</p>
-		</main>
-	</body>
-</html>
+<PublicLayout
+	title="类脑 Odysseia - 道馆挑战"
+	description="类脑 Odysseia 社区的受保护教程阅读入口、答题规则与隐私说明。"
+>
+	<main class="public-shell">
+		<section class="public-hero" aria-labelledby="site-title">
+			<p class="eyebrow">类脑 ODYSSEIA 社区</p>
+			<h1 id="site-title">类脑 Odysseia - 道馆挑战</h1>
+			<p>
+				这里提供与 Discord 社区答题活动配套的教程阅读入口。完成 Discord 身份和社区成员资格验证后，成员可以阅读受保护教程；教程并不存放在公开代码仓库中。
+			</p>
+			<a class="button" href="/login">前往登录入口</a>
+		</section>
+
+		<section id="rules" aria-labelledby="rules-title">
+			<h2 id="rules-title">现行答题规则</h2>
+			<ol>
+				<li>通过 6 个道馆可以把缓冲区缩短一定时间。</li>
+				<li>答题为开卷形式，可以查阅教程和搜索教程。</li>
+				<li>禁止代打。</li>
+				<li>禁止在公屏索要答案。</li>
+				<li>同一个道馆多次答错会进入 1 小时冷却；不同道馆之间的冷却彼此独立。</li>
+				<li>每道题的答题时间为 180 秒；超时计作一次失败。</li>
+			</ol>
+			<p class="muted">只有基础教程属于答题范围；扩展阅读用于补充学习。</p>
+		</section>
+
+		<section id="privacy" aria-labelledby="privacy-title">
+			<h2 id="privacy-title">信息收集和隐私说明</h2>
+			<p>
+				网站会在 Discord OAuth 登录中使用 Discord 身份信息来验证访问资格。成员成功验证并加载受保护教程后，网站会尝试收集有限的浏览器与网络关联信号，用于人工排查可能的代打关联；采集失败不会阻止阅读。
+			</p>
+
+			<h3>会处理哪些信息</h3>
+			<ul>
+				<li>Discord 用户 ID、用户名快照、社区成员验证时间和 Session nonce；不保存 Discord access token。</li>
+				<li>浏览器侧的 Canvas、WebGL、system、screen、timezone/language 等最小必要信号，以及服务端取得的 User-Agent 哈希。</li>
+				<li>服务端从 Cloudflare 请求上下文取得的 IP、网络前缀、国家/地区和 ASN；网站不要求客户端提交这些值，也不会尝试绕过代理获取真实 IP。</li>
+			</ul>
+
+			<h3>如何使用与保护</h3>
+			<p>
+				IP、网络前缀、浏览器指纹和 Session nonce 会使用独立密钥的 HMAC-SHA256 处理后再用于关联，数据库不保存明文 IP。信息只用于确认 Discord 社区成员访问资格，以及由 Cloudflare 账号管理员结合多项线索进行人工调查。
+			</p>
+			<p>
+				浏览器指纹可能变化、被伪造或被隐私工具削弱；家庭、校园、公司、运营商 NAT 或 VPN 也可能让多人共享网络。网站不会保存与身份关联的精确进入页面历史，不会仅依据单一信号自动评分、处罚或封禁任何用户。
+			</p>
+
+			<h3>保留、删除与位置提示</h3>
+			<p>
+				活跃业务记录最多保留 90 天；删除后，Cloudflare Workers Free 的灾难恢复副本最多可能额外保留 7 天。确认 Discord 账号控制权后，如需查询或提前删除与该账号关联的活跃业务记录，请通过社区联系。
+			</p>
+			<p>
+				D1 使用 <code>apac</code> location hint 作为延迟偏好；这不是香港、中国大陆或任何特定地区的数据驻留承诺。
+			</p>
+		</section>
+
+		<section id="licensing" aria-labelledby="licensing-title">
+			<h2 id="licensing-title">许可与内容边界</h2>
+			<ul>
+				<li>网站程序适用 <strong>AGPL-3.0-or-later</strong>。</li>
+				<li>运营者有权许可的教程正文、原创图示和附件适用 <strong>CC BY-NC 4.0</strong>。</li>
+				<li>教程中引用的第三方代码、图片、商标或转载内容保留原作者署名和各自条款。</li>
+			</ul>
+		</section>
+	</main>
+</PublicLayout>
