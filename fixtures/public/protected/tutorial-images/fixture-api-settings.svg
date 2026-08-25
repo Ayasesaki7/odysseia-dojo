@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title description">
+  <title id="title">公开 fixture 的 API 设置示意图</title>
+  <desc id="description">没有真实数据的 API 地址和密钥占位输入框。</desc>
+  <rect width="960" height="540" fill="#f8fafc"/>
+  <rect x="120" y="80" width="720" height="380" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>
+  <text x="180" y="155" font-family="system-ui, sans-serif" font-size="38" fill="#1e293b">Fixture API settings</text>
+  <text x="180" y="225" font-family="system-ui, sans-serif" font-size="24" fill="#475569">Address</text>
+  <rect x="180" y="245" width="600" height="55" rx="8" fill="#e2e8f0"/>
+  <text x="200" y="281" font-family="system-ui, sans-serif" font-size="22" fill="#64748b">https://example.invalid/api</text>
+  <text x="180" y="360" font-family="system-ui, sans-serif" font-size="24" fill="#475569">Key</text>
+  <rect x="180" y="380" width="600" height="55" rx="8" fill="#e2e8f0"/>
+  <text x="200" y="416" font-family="system-ui, sans-serif" font-size="22" fill="#64748b">fixture-only-placeholder</text>
+</svg>

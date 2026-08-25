@@ -1,0 +1,23 @@
+_dev/
+
+# Installed dependencies and tool state
+/node_modules/
+/.astro/
+/.wrangler/
+
+# Generated site output
+/dist/
+
+# Materialized runtime content. The tracked source of public test content is
+# fixtures/; content:local may link trusted private content here.
+/src/content/docs/
+/public/protected/
+
+# Local-only configuration and transient output
+/.env*
+!/.env.example
+/.dev.vars*
+!/.dev.vars.example
+/coverage/
+/.tmp/
+*.log

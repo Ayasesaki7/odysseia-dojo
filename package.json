@@ -1,0 +1,31 @@
+{
+  "name": "odysseia-dojo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fixture-only public site for 类脑 Odysseia - 道馆挑战.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=12.0.0 <13"
+  },
+  "packageManager": "npm@12.0.1",
+  "scripts": {
+    "content:fixtures": "node scripts/content-assembly.mjs fixtures",
+    "content:local": "node scripts/content-assembly.mjs local",
+    "dev": "astro dev",
+    "check": "npm run content:fixtures && astro check",
+    "test": "npm run content:fixtures && node --test",
+    "build": "npm run content:fixtures && astro build && node scripts/verify-fixture-output.mjs",
+    "validate": "npm run test && npm run check && npm run build",
+    "preview": "npm run build && astro preview"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@astrojs/starlight": "^0.41.8",
+    "astro": "^7.2.6",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "esbuild": false
+  }
+}

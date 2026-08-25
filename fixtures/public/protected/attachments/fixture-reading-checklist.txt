@@ -1,0 +1,5 @@
+Fixture reading checklist
+
+- Confirm the docs route does not include its numeric filename prefix.
+- Search for 道馆, Discord, DC, 酒馆, SillyTavern, and API.
+- Treat this file as a public test attachment, not a real tutorial resource.
