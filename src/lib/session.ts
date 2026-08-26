@@ -1,5 +1,6 @@
 import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 
+import { bytesToBase64Url } from './base64url';
 import { readCookie, secureCookie } from './cookies';
 import { SESSION_COOKIE_NAME } from './session-contract.js';
 
@@ -36,10 +37,7 @@ function isSessionClaims(payload: JWTPayload): payload is SessionClaims {
 }
 
 function randomSessionNonce(): string {
-	const bytes = crypto.getRandomValues(new Uint8Array(32));
-	let binary = '';
-	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
+	return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 export async function issueSession(

@@ -1,4 +1,5 @@
 import { readCookie, secureCookie } from './cookies';
+import { bytesToBase64Url } from './base64url';
 
 export const OAUTH_STATE_COOKIE_NAME = 'dojo_oauth_state';
 export const OAUTH_STATE_DURATION_SECONDS = 10 * 60;
@@ -36,12 +37,6 @@ export class DiscordOAuthError extends Error {
 	}
 }
 
-function bytesToBase64Url(bytes: Uint8Array): string {
-	let binary = '';
-	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '');
-}
-
 function base64UrlToBytes(value: string): Uint8Array | undefined {
 	if (!/^[A-Za-z0-9_-]+$/u.test(value)) return undefined;
 
@@ -66,6 +61,14 @@ function base64(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
+}
+
+interface DiscordGuild {
+	id: string;
+}
+
+function isDiscordGuild(value: unknown): value is DiscordGuild {
+	return isRecord(value) && typeof value.id === 'string' && /^[0-9]+$/u.test(value.id);
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
@@ -228,12 +231,12 @@ async function belongsToGuild(accessToken: string, guildId: string): Promise<boo
 		const response = await discordJson(guildsUrl.toString(), {
 			headers: { Authorization: `Bearer ${accessToken}` },
 		});
-		if (!Array.isArray(response)) throw new DiscordOAuthError();
-		if (response.some((guild) => isRecord(guild) && guild.id === guildId)) return true;
+		if (!Array.isArray(response) || !response.every(isDiscordGuild)) throw new DiscordOAuthError();
+		if (response.some((guild) => guild.id === guildId)) return true;
 		if (response.length < 200) return false;
 
 		const cursor = response.at(-1);
-		if (!isRecord(cursor) || typeof cursor.id !== 'string' || !/^[0-9]+$/u.test(cursor.id) || cursors.has(cursor.id)) {
+		if (!cursor || cursors.has(cursor.id)) {
 			throw new DiscordOAuthError();
 		}
 		cursors.add(cursor.id);

@@ -25,6 +25,14 @@ searches fixture Chinese, product, acronym, and `<details>` terms. The test
 signer and its fixed secret live only under `test/support/`; production code
 only receives configured secrets.
 
+The OAuth routes and their D1 activity write are Astro `src/pages/api/**`
+endpoints, while `src/middleware.ts` applies the shared Session policy to
+Astro-rendered routes. The custom Worker remains intentionally narrow: with
+`assets.run_worker_first`, it invokes that same policy before delegating
+protected static-asset requests to the Astro Cloudflare handler. This is
+necessary because the adapter returns matching `ASSETS` before Astro middleware
+runs.
+
 ## Discord boundary
 
 Wrangler's test harness sends Worker outbound `fetch()` calls through the Node

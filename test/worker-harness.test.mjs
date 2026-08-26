@@ -368,6 +368,19 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(locationPath(failed), '/discord-unavailable');
 	});
 
+	test('treats malformed Guild payloads as Discord failures instead of non-membership', async () => {
+		for (const guildPage of [[{}], ['not-a-guild']]) {
+			const start = await beginOAuth();
+			const response = await withDiscordResponder(
+				memberResponder({ guildPages: [guildPage] }),
+				() => finishOAuth(start, { code: 'fixture-authorization-code' })
+			);
+
+			assert.equal(response.status, 302);
+			assert.equal(locationPath(response), '/discord-unavailable');
+		}
+	});
+
 	test('falls back to the tutorial root for unsafe OAuth return targets', async () => {
 		await createAuthActivityTable();
 		for (const unsafeReturnTo of [
