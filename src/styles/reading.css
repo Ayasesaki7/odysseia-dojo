@@ -1,0 +1,16 @@
+:root {
+	--sl-content-width: min(66rem, 92vw);
+}
+
+/* Keep reading controls compact after widening the desktop text column. */
+@media (min-width: 72rem) {
+	.pagination-links {
+		max-inline-size: 45rem;
+		margin-inline-start: auto;
+	}
+}
+
+/* Break only an otherwise unfit inline token instead of widening the page. */
+.sl-markdown-content :not(pre) > code {
+	overflow-wrap: anywhere;
+}

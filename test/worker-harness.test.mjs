@@ -466,16 +466,25 @@ describe('production Worker test seam', { concurrency: false }, () => {
 
 	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
 		const headers = { Cookie: await signedSessionCookie() };
-		const [tutorial, extension, outdated, resourcePage] = await Promise.all([
+		const [tutorialIndex, extensionIndex, tutorial, extension, outdated, resourcePage] = await Promise.all([
+			harness.fetch('/docs/tutorials/', { headers }),
+			harness.fetch('/docs/extensions/', { headers }),
 			harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers }),
 			harness.fetch('/docs/extensions/account-safety/', { headers }),
 			harness.fetch('/docs/extensions/legacy-interface/', { headers }),
 			harness.fetch('/docs/tutorials/sillytavern-api/', { headers }),
 		]);
+		assert.equal(tutorialIndex.status, 200);
+		assert.equal(extensionIndex.status, 200);
 		assert.equal(tutorial.status, 200);
 		assert.equal(extension.status, 200);
 		assert.equal(outdated.status, 200);
 		assert.equal(resourcePage.status, 200);
+
+		const tutorialIndexBody = await tutorialIndex.text();
+		assert.match(tutorialIndexBody, /基础教程.*答题范围/u);
+		const extensionIndexBody = await extensionIndex.text();
+		assert.match(extensionIndexBody, /扩展阅读.*不.*答题范围/u);
 
 		const tutorialBody = await tutorial.text();
 		assert.match(tutorialBody, /<html lang="zh-CN"/u);
@@ -492,11 +501,20 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(tutorialBody, /starlight-menu-button/u);
 		assert.match(tutorialBody, /starlight-theme-select/u);
 		assert.match(tutorialBody, /data-content-category="tutorial"/u);
-		assert.match(tutorialBody, /基础教程属于答题范围/u);
+		assert.equal([...tutorialBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
+		assert.doesNotMatch(tutorialBody, /基础教程属于答题范围/u);
 
 		const extensionBody = await extension.text();
 		assert.match(extensionBody, /data-content-category="extension"/u);
-		assert.match(extensionBody, /扩展阅读不属于答题范围/u);
+		assert.equal([...extensionBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
+		assert.doesNotMatch(extensionBody, /扩展阅读不属于答题范围/u);
+
+		const stylesheets = [...tutorialBody.matchAll(/<link[^>]+href="([^"]+\.css)"/gu)].map((match) => match[1]);
+		assert.ok(stylesheets.length > 0, 'The reading page must load a stylesheet.');
+		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join('\n');
+		assert.match(stylesheet, /--sl-content-width\s*:\s*min\(66rem,\s*92vw\)/u);
+		assert.match(stylesheet, /\.pagination-links\s*\{\s*max-inline-size\s*:\s*45rem/u);
+		assert.match(stylesheet, /overflow-wrap\s*:\s*anywhere/u);
 
 		const outdatedBody = await outdated.text();
 		assert.match(outdatedBody, /data-outdated-notice/u);
