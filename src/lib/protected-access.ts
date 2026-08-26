@@ -8,7 +8,7 @@ function protectedRequestKind(pathname: string): ProtectedRequestKind | undefine
 	if (/^\/protected\/(?:tutorial-images|attachments)(?:\/|$)/u.test(pathname)) return 'resource';
 }
 
-export function isProtectedRequest(request: Request): boolean {
+function isProtectedRequest(request: Request): boolean {
 	return protectedRequestKind(new URL(request.url).pathname) !== undefined;
 }
 
@@ -32,7 +32,7 @@ function rejectedProtectedRequest(request: Request, kind: ProtectedRequestKind):
 	});
 }
 
-export async function rejectUnauthenticatedProtectedRequest(
+async function rejectUnauthenticatedProtectedRequest(
 	request: Request,
 	sessionSecret: string
 ): Promise<Response | undefined> {
@@ -46,7 +46,7 @@ export async function rejectUnauthenticatedProtectedRequest(
 	}
 }
 
-export function privateProtectedResponse(request: Request, response: Response): Response {
+function privateProtectedResponse(request: Request, response: Response): Response {
 	if (!isProtectedRequest(request)) return response;
 
 	const headers = new Headers(response.headers);
@@ -58,9 +58,25 @@ export function privateProtectedResponse(request: Request, response: Response): 
 	});
 }
 
-export function unavailableProtectedRequest(): Response {
+function unavailableProtectedRequest(): Response {
 	return new Response('Protected content is temporarily unavailable.', {
 		status: 503,
 		headers: { 'Cache-Control': 'no-store' },
 	});
+}
+
+export async function applyProtectedAccessPolicy(
+	request: Request,
+	sessionSecret: string,
+	continueRequest: () => Promise<Response>
+): Promise<Response> {
+	const rejection = await rejectUnauthenticatedProtectedRequest(request, sessionSecret);
+	if (rejection) return rejection;
+
+	try {
+		return privateProtectedResponse(request, await continueRequest());
+	} catch (error) {
+		if (isProtectedRequest(request)) return unavailableProtectedRequest();
+		throw error;
+	}
 }
