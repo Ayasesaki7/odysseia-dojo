@@ -69,11 +69,11 @@ command and the test-only Discord outbound boundary.
 
 Fixture and local builds intentionally render no fake canonical or source URL.
 Before a production build, set `DEPLOYMENT_MODE=production` together with a
-non-placeholder `PUBLIC_CANONICAL_URL` origin and `PUBLIC_SOURCE_COMMIT_URL`
-that names the full 40-character public commit SHA. The build refuses a
-production-mode build without those values, so a production footer can link to
-the exact deployed program version without implying that tutorial material is
-public.
+non-placeholder `PUBLIC_CANONICAL_URL` origin and
+`PUBLIC_SOURCE_REPOSITORY_URL` that identifies the public GitHub repository.
+The build refuses a production-mode build without those values. When configured,
+the centered footer shows a GitHub link to the website program without implying
+that tutorial material is public.
 
 The fixture corpus is deliberately non-sensitive. It contains tutorial and
 extension examples, Chinese and English search terms, an outdated page, optional

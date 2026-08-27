@@ -27,6 +27,17 @@ function requiredHttpsUrl(value, name) {
 	return url;
 }
 
+function requiredGitHubRepositoryUrl(value, name) {
+	const url = requiredHttpsUrl(value, name);
+	const pathSegments = url.pathname.split('/').filter(Boolean);
+
+	if (url.hostname !== 'github.com' || pathSegments.length !== 2 || url.search || url.hash) {
+		throw new Error(`${name} must be an HTTPS GitHub repository URL.`);
+	}
+
+	return url;
+}
+
 export function assertProductionPublicBuildConfig(environment = process.env) {
 	if (environment.DEPLOYMENT_MODE !== 'production') return;
 
@@ -35,8 +46,5 @@ export function assertProductionPublicBuildConfig(environment = process.env) {
 		throw new Error('PUBLIC_CANONICAL_URL must be an origin URL without a path, query, or fragment.');
 	}
 
-	const sourceCommitUrl = requiredHttpsUrl(environment.PUBLIC_SOURCE_COMMIT_URL, 'PUBLIC_SOURCE_COMMIT_URL');
-	if (!/(?:^|\/)commit\/([0-9a-f]{40})(?:$|[/?#])/iu.test(sourceCommitUrl.pathname)) {
-		throw new Error('PUBLIC_SOURCE_COMMIT_URL must identify a complete 40-character public commit SHA.');
-	}
+	requiredGitHubRepositoryUrl(environment.PUBLIC_SOURCE_REPOSITORY_URL, 'PUBLIC_SOURCE_REPOSITORY_URL');
 }

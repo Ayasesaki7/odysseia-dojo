@@ -2,14 +2,6 @@
 	--sl-content-width: min(66rem, 92vw);
 }
 
-/* Keep reading controls compact after widening the desktop text column. */
-@media (min-width: 72rem) {
-	.pagination-links {
-		max-inline-size: 45rem;
-		margin-inline: auto;
-	}
-}
-
 /* Avoid a lingering touch overlay without hiding keyboard focus indicators. */
 @media (max-width: 49.999rem) {
 	mobile-starlight-toc .isMobile a {

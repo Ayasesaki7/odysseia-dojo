@@ -8,7 +8,7 @@ interface Props {
 
 const { title, description } = Astro.props;
 const canonicalOrigin = import.meta.env.PUBLIC_CANONICAL_URL;
-const sourceCommitUrl = import.meta.env.PUBLIC_SOURCE_COMMIT_URL;
+const sourceRepositoryUrl = import.meta.env.PUBLIC_SOURCE_REPOSITORY_URL;
 
 let canonicalUrl: string | undefined;
 if (canonicalOrigin) {
@@ -33,21 +33,16 @@ if (canonicalOrigin) {
 		<header class="public-header">
 			<a class="public-brand" href="/">类脑 Odysseia - 道馆挑战</a>
 			<nav aria-label="公开导航">
-				<a href="/#rules">答题规则</a>
 				<a href="/#privacy">隐私说明</a>
 				<a href="/login">登录</a>
 			</nav>
 		</header>
 		<slot />
 		<footer class="public-footer">
-			<p>教程内容只在受保护阅读区提供；公开仓库不包含教程正文或受保护资源。</p>
-			{
-				sourceCommitUrl ? (
-					<a href={sourceCommitUrl}>网站程序源代码</a>
-				) : (
-					<p>生产发布时，网站程序源代码链接会指向该部署对应的完整公开 commit。</p>
-				)
-			}
+			<p>Made by KKTsN with 💖</p>
+			{sourceRepositoryUrl && (
+				<a class="footer-github-link" href={sourceRepositoryUrl}>GitHub</a>
+			)}
 		</footer>
 	</body>
 </html>

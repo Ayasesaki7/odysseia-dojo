@@ -225,14 +225,19 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(accessDenied.headers.get('set-cookie'), null);
 
 		const homeBody = await home.text();
-		assert.match(homeBody, /通过 6 个道馆可以把缓冲区缩短一定时间/u);
-		assert.doesNotMatch(homeBody, /缓冲区缩短 144h/u);
+		assert.doesNotMatch(homeBody, /教程与答题范围/u);
+		assert.doesNotMatch(homeBody, /现行答题规则/u);
+		assert.doesNotMatch(homeBody, /href="\/#rules"/u);
+		assert.match(homeBody, /<summary>查看完整隐私说明<\/summary>/u);
+		assert.match(homeBody, /<summary>查看教程署名、许可与内容边界<\/summary>/u);
 		assert.match(homeBody, /HMAC-SHA256/u);
 		assert.match(homeBody, /活跃业务记录最多保留 90 天/u);
 		assert.match(homeBody, /最多可能额外保留 7 天/u);
 		assert.match(homeBody, /请通过社区联系/u);
 		assert.match(homeBody, /AGPL-3\.0-or-later/u);
 		assert.match(homeBody, /CC BY-NC 4\.0/u);
+		assert.match(homeBody, /Made by KKTsN with 💖/u);
+		assert.doesNotMatch(homeBody, /生产发布时，网站程序源代码链接会指向/u);
 		assert.doesNotMatch(homeBody, /api\/fingerprint/u);
 
 		const loginBody = await login.text();
@@ -464,7 +469,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(await resource.text(), /<svg/u);
 	});
 
-	test('keeps directory-first indexes and public reading disclosures available', async () => {
+	test('keeps directory-first indexes and separates the compact homepage disclosures', async () => {
 		const headers = { Cookie: await signedSessionCookie() };
 		const [tutorialIndex, extensionIndex, home] = await Promise.all([
 			harness.fetch('/docs/tutorials/', { headers }),
@@ -490,9 +495,9 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.ok(extensionDirectory < extensionScopeNote, 'The extension directory must come first.');
 
 		const homeBody = await home.text();
-		assert.match(homeBody, /id="reading"/u);
-		assert.match(homeBody, /基础教程按推荐顺序组织/u);
-		assert.match(homeBody, /扩展阅读用于补充学习/u);
+		assert.doesNotMatch(homeBody, /id="reading"/u);
+		assert.doesNotMatch(homeBody, /id="rules"/u);
+		assert.match(homeBody, /<details>/u);
 		assert.match(homeBody, /KKTsN/u);
 		assert.match(homeBody, /@kk1189_61801/u);
 		assert.match(homeBody, /@10091009mc--钓鱼大亨/u);
@@ -520,8 +525,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(tutorialBody, /扩展阅读/u);
 		assert.match(tutorialBody, /aria-current="page"/u);
 		assert.match(tutorialBody, /right-sidebar/u);
-		assert.match(tutorialBody, /rel="prev"/u);
-		assert.match(tutorialBody, /rel="next"/u);
+		assert.doesNotMatch(tutorialBody, /rel="prev"/u);
+		assert.doesNotMatch(tutorialBody, /rel="next"/u);
 		assert.match(tutorialBody, /class="sl-anchor-link"/u);
 		assert.match(tutorialBody, /<details>/u);
 		assert.match(tutorialBody, /<summary>可选：进一步了解<\/summary>/u);
@@ -538,7 +543,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 
 		const outdatedBody = await outdated.text();
 		assert.match(outdatedBody, /data-outdated-notice/u);
-		assert.match(outdatedBody, /本文部分内容可能已经过时/u);
+		assert.match(outdatedBody, /本文部分内容可能已经过时。/u);
 		assert.doesNotMatch(outdatedBody, /请结合当前界面和最新说明阅读/u);
 		assert.match(outdatedBody, /<h1\b[^>]*>[\s\S]*?<\/h1>\s*<aside\b[^>]*\bdata-outdated-notice\b/u);
 
@@ -560,10 +565,6 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.ok(stylesheets.length > 0, 'The reading page must load a stylesheet.');
 		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join('\n');
 		assert.match(stylesheet, /--sl-content-width\s*:\s*min\(66rem,\s*92vw\)/u);
-		assert.match(
-			stylesheet,
-			/\.pagination-links\s*\{[^}]*max-inline-size\s*:\s*45rem[^}]*margin-inline\s*:\s*auto/u
-		);
 		assert.match(
 			stylesheet,
 			/mobile-starlight-toc\s+\.isMobile\s+a\s*\{[^}]*-webkit-tap-highlight-color\s*:\s*transparent/u

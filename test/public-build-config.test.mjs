@@ -7,7 +7,7 @@ test('fixture and local builds do not require production public URLs', () => {
 	assert.doesNotThrow(() => assertProductionPublicBuildConfig({}));
 });
 
-test('production builds require a canonical origin and a full public commit URL', () => {
+test('production builds require a canonical origin and a public GitHub repository URL', () => {
 	assert.throws(
 		() => assertProductionPublicBuildConfig({ DEPLOYMENT_MODE: 'production' }),
 		/PUBLIC_CANONICAL_URL must be set/u
@@ -17,7 +17,7 @@ test('production builds require a canonical origin and a full public commit URL'
 			assertProductionPublicBuildConfig({
 				DEPLOYMENT_MODE: 'production',
 				PUBLIC_CANONICAL_URL: 'https://example.com',
-				PUBLIC_SOURCE_COMMIT_URL: 'https://github.com/example/odysseia-dojo/commit/0123456789abcdef0123456789abcdef01234567',
+				PUBLIC_SOURCE_REPOSITORY_URL: 'https://github.com/example/odysseia-dojo',
 			}),
 		/non-placeholder HTTPS URL/u
 	);
@@ -26,15 +26,15 @@ test('production builds require a canonical origin and a full public commit URL'
 			assertProductionPublicBuildConfig({
 				DEPLOYMENT_MODE: 'production',
 				PUBLIC_CANONICAL_URL: 'https://odysseia-dojo.github.io',
-				PUBLIC_SOURCE_COMMIT_URL: 'https://github.com/example/odysseia-dojo/commit/01234567',
+				PUBLIC_SOURCE_REPOSITORY_URL: 'https://github.com/example/odysseia-dojo/issues',
 			}),
-		/40-character public commit SHA/u
+		/HTTPS GitHub repository URL/u
 	);
 	assert.doesNotThrow(() =>
 		assertProductionPublicBuildConfig({
 			DEPLOYMENT_MODE: 'production',
 			PUBLIC_CANONICAL_URL: 'https://odysseia-dojo.github.io',
-			PUBLIC_SOURCE_COMMIT_URL: 'https://github.com/example/odysseia-dojo/commit/0123456789abcdef0123456789abcdef01234567',
+			PUBLIC_SOURCE_REPOSITORY_URL: 'https://github.com/example/odysseia-dojo',
 		})
 	);
 });
