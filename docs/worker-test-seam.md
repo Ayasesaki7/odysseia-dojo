@@ -15,15 +15,18 @@ isolated local D1 binding. No real tutorial material, deployment secret, or
 external Discord request is needed.
 
 The black-box tests use only HTTP requests through that harness. They cover an
-anonymous public page and static asset, protected document and resource routes,
-accepted, tampered, and expired sessions, the Discord OAuth start/callback/
-logout routes, return-target validation, distinct failure states, and D1 OAuth
-activity effects. Authenticated reading checks also exercise the native
+anonymous public page and required `/_astro/` asset; canonical, trailing-slash,
+`index.html`, and encoded protected document/resource aliases; actual Pagefind
+bundle and fragment output; and protected images and attachments. They also
+cover accepted, tampered, expired, forged, and malformed sessions;
+authentication/classification/routing failures; private cache headers and an
+authenticated-then-anonymous reuse attempt. The OAuth start/callback/logout,
+return-target, distinct failure-state, and D1 OAuth-activity checks remain at
+the same boundary. Authenticated reading checks also exercise the native
 Starlight navigation and page features. The Pagefind check loads the generated
-bundle against the same Worker URL, verifies its bundle is protected, and
-searches fixture Chinese, product, acronym, and `<details>` terms. The test
-signer and its fixed secret live only under `test/support/`; production code
-only receives configured secrets.
+bundle against the same Worker URL and searches fixture Chinese, product,
+acronym, and `<details>` terms. The test signer and its fixed secret live only
+under `test/support/`; production code only receives configured secrets.
 
 The OAuth routes and their D1 activity write are Astro `src/pages/api/**`
 endpoints, while `src/middleware.ts` applies the shared Session policy to

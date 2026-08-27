@@ -2,14 +2,36 @@ import { verifySession } from './session';
 
 type ProtectedRequestKind = 'document' | 'resource';
 
-function protectedRequestKind(pathname: string): ProtectedRequestKind | undefined {
+const MAX_PATH_DECODE_PASSES = 4;
+
+function canonicalPathname(request: Request): string {
+	let pathname = new URL(request.url).pathname;
+
+	for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
+		const decoded = decodeURIComponent(pathname);
+		if (decoded === pathname) {
+			const segments = [];
+			for (const segment of decoded.replaceAll('\\', '/').split('/')) {
+				if (!segment || segment === '.') continue;
+				if (segment === '..') {
+					segments.pop();
+					continue;
+				}
+				segments.push(segment);
+			}
+			return `/${segments.join('/')}`;
+		}
+		pathname = decoded;
+	}
+
+	throw new Error('Path encoding exceeded the safe decoding limit.');
+}
+
+function protectedRequestKind(request: Request): ProtectedRequestKind | undefined {
+	const pathname = canonicalPathname(request);
 	if (/^\/docs\/(?:tutorials|extensions)(?:\/|$)/u.test(pathname)) return 'document';
 	if (/^\/pagefind(?:\/|$)/u.test(pathname)) return 'resource';
 	if (/^\/protected\/(?:tutorial-images|attachments)(?:\/|$)/u.test(pathname)) return 'resource';
-}
-
-function isProtectedRequest(request: Request): boolean {
-	return protectedRequestKind(new URL(request.url).pathname) !== undefined;
 }
 
 function rejectedProtectedRequest(request: Request, kind: ProtectedRequestKind): Response {
@@ -34,9 +56,9 @@ function rejectedProtectedRequest(request: Request, kind: ProtectedRequestKind):
 
 async function rejectUnauthenticatedProtectedRequest(
 	request: Request,
-	sessionSecret: string
+	sessionSecret: string,
+	kind: ProtectedRequestKind | undefined
 ): Promise<Response | undefined> {
-	const kind = protectedRequestKind(new URL(request.url).pathname);
 	if (!kind) return undefined;
 
 	try {
@@ -46,8 +68,8 @@ async function rejectUnauthenticatedProtectedRequest(
 	}
 }
 
-function privateProtectedResponse(request: Request, response: Response): Response {
-	if (!isProtectedRequest(request)) return response;
+function privateProtectedResponse(kind: ProtectedRequestKind | undefined, response: Response): Response {
+	if (!kind) return response;
 
 	const headers = new Headers(response.headers);
 	headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -70,13 +92,20 @@ export async function applyProtectedAccessPolicy(
 	sessionSecret: string,
 	continueRequest: () => Promise<Response>
 ): Promise<Response> {
-	const rejection = await rejectUnauthenticatedProtectedRequest(request, sessionSecret);
+	let kind: ProtectedRequestKind | undefined;
+	try {
+		kind = protectedRequestKind(request);
+	} catch {
+		return unavailableProtectedRequest();
+	}
+
+	const rejection = await rejectUnauthenticatedProtectedRequest(request, sessionSecret, kind);
 	if (rejection) return rejection;
 
 	try {
-		return privateProtectedResponse(request, await continueRequest());
+		return privateProtectedResponse(kind, await continueRequest());
 	} catch (error) {
-		if (isProtectedRequest(request)) return unavailableProtectedRequest();
+		if (kind) return unavailableProtectedRequest();
 		throw error;
 	}
 }

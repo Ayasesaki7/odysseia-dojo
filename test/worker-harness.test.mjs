@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readdir } from 'node:fs/promises';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -60,6 +61,22 @@ function locationPath(response) {
 	assert.ok(location, 'Expected a redirect location.');
 	const url = new URL(location, 'https://worker.test');
 	return `${url.pathname}${url.search}${url.hash}`;
+}
+
+async function pagefindFragmentPath() {
+	const fragmentDirectory = resolve(projectRoot, 'dist/client/pagefind/fragment');
+	const entry = (await readdir(fragmentDirectory, { withFileTypes: true })).find((candidate) => candidate.isFile());
+	assert.ok(entry, 'Expected the production fixture build to contain a Pagefind fragment.');
+	return `/pagefind/fragment/${entry.name}`;
+}
+
+async function astroStylesheetPath() {
+	const assetDirectory = resolve(projectRoot, 'dist/client/_astro');
+	const entry = (await readdir(assetDirectory, { withFileTypes: true })).find(
+		(candidate) => candidate.isFile() && candidate.name.endsWith('.css')
+	);
+	assert.ok(entry, 'Expected the production fixture build to contain an /_astro/ stylesheet.');
+	return `/_astro/${entry.name}`;
 }
 
 async function beginOAuth(returnTo = '/docs/tutorials/') {
@@ -201,6 +218,10 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(response.status, 200);
 		const body = await response.text();
 		assert.match(body, /类脑 Odysseia - 道馆挑战/u);
+
+		const stylesheet = await harness.fetch(await astroStylesheetPath());
+		assert.equal(stylesheet.status, 200);
+		assert.match(stylesheet.headers.get('content-type') ?? '', /^text\/css/u);
 
 		const asset = await harness.fetch('/favicon.svg');
 		assert.equal(asset.status, 200);
@@ -453,9 +474,47 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.doesNotMatch(await resource.text(), /fixture-api-settings/u);
 	});
 
+	test('fails closed for encoded and index-file aliases of protected output', async () => {
+		const fragmentPath = await pagefindFragmentPath();
+		const fragmentName = fragmentPath.split('/').at(-1);
+		assert.ok(fragmentName, 'Expected the Pagefind fragment path to have a filename.');
+
+		for (const path of [
+			'/docs/tutorials/discord-and-odysseia',
+			'/docs/tutorials/discord-and-odysseia/index.html',
+			'/docs%2Ftutorials%2Fdiscord-and-odysseia%2Findex.html',
+			'/docs%252Ftutorials%252Fdiscord-and-odysseia%252Findex.html',
+			'/docs/extensions/account-safety/index.html',
+			'/docs%2Fextensions%2Faccount-safety%2Findex.html',
+		]) {
+			const response = await harness.fetch(path, { redirect: 'manual' });
+			assert.equal(response.status, 302, path);
+			assert.match(response.headers.get('location') ?? '', /^\/login\?returnTo=/u, path);
+			assert.equal(response.headers.get('cache-control'), 'no-store', path);
+			assert.equal(await response.text(), '', path);
+		}
+
+		for (const path of [
+			'/pagefind/pagefind.js',
+			'/pagefind%2Fpagefind.js',
+			fragmentPath,
+			`/pagefind%2Ffragment%2F${fragmentName}`,
+			'/protected/tutorial-images/fixture-api-settings.svg',
+			'/protected%2Ftutorial-images%2Ffixture-api-settings.svg',
+			'/protected/attachments/fixture-reading-checklist.txt',
+			'/protected%2Fattachments%2Ffixture-reading-checklist.txt',
+		]) {
+			const response = await harness.fetch(path);
+			assert.equal(response.status, 401, path);
+			assert.equal(response.headers.get('cache-control'), 'no-store', path);
+			assert.equal(await response.text(), 'Authentication is required to access this resource.', path);
+		}
+	});
+
 	test('serves protected fixture output only for a token accepted by the production verifier', async () => {
 		const cookie = await signedSessionCookie();
 		const headers = { Cookie: cookie };
+		const fragmentPath = await pagefindFragmentPath();
 
 		const document = await harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers });
 		assert.equal(document.status, 200);
@@ -467,6 +526,15 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(resource.status, 200);
 		assert.equal(resource.headers.get('cache-control'), 'private, no-store, max-age=0');
 		assert.match(await resource.text(), /<svg/u);
+
+		const attachment = await harness.fetch('/protected/attachments/fixture-reading-checklist.txt', { headers });
+		assert.equal(attachment.status, 200);
+		assert.equal(attachment.headers.get('cache-control'), 'private, no-store, max-age=0');
+		assert.match(await attachment.text(), /Fixture reading checklist/u);
+
+		const fragment = await harness.fetch(fragmentPath, { headers });
+		assert.equal(fragment.status, 200);
+		assert.equal(fragment.headers.get('cache-control'), 'private, no-store, max-age=0');
 	});
 
 	test('keeps directory-first indexes and separates the compact homepage disclosures', async () => {
@@ -610,6 +678,54 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(response.status, 302);
 		assert.equal(locationPath(response), '/login?returnTo=%2Fdocs%2Ftutorials%2Fdiscord-and-odysseia%2F');
 		assert.equal(response.headers.get('cache-control'), 'no-store');
+	});
+
+	test('fails closed when session verification or protected-path classification fails', async () => {
+		const forgedCookie = await signedSessionCookie({
+			secret: 'different-test-session-secret-that-is-longer-than-thirty-two-bytes',
+		});
+		for (const cookie of [forgedCookie, 'dojo_session=%']) {
+			const response = await harness.fetch('/pagefind%2Fpagefind.js', { headers: { Cookie: cookie } });
+			assert.equal(response.status, 401);
+			assert.equal(response.headers.get('cache-control'), 'no-store');
+			assert.equal(await response.text(), 'Authentication is required to access this resource.');
+		}
+
+		const malformedPath = await harness.fetch('/docs%2Ftutorials%2Fdiscord-and-odysseia%2Findex.html%FF', {
+			redirect: 'manual',
+		});
+		assert.equal(malformedPath.status, 503);
+		assert.equal(malformedPath.headers.get('cache-control'), 'no-store');
+		assert.equal(await malformedPath.text(), 'Protected content is temporarily unavailable.');
+
+		const missingProtectedRoute = await harness.fetch('/docs/tutorials/no-such-fixture/index.html', {
+			headers: { Cookie: await signedSessionCookie() },
+		});
+		assert.equal(missingProtectedRoute.status, 404);
+		assert.equal(missingProtectedRoute.headers.get('cache-control'), 'private, no-store, max-age=0');
+	});
+
+	test('does not make authenticated protected output reusable by anonymous requests', async () => {
+		const path = '/docs/tutorials/discord-and-odysseia/';
+		const authenticated = await harness.fetch(path, { headers: { Cookie: await signedSessionCookie() } });
+		assert.equal(authenticated.status, 200);
+		assert.equal(authenticated.headers.get('cache-control'), 'private, no-store, max-age=0');
+		assert.match(await authenticated.text(), /Discord/u);
+
+		const anonymous = await harness.fetch(path, { redirect: 'manual' });
+		assert.equal(anonymous.status, 302);
+		assert.equal(anonymous.headers.get('cache-control'), 'no-store');
+		assert.equal(await anonymous.text(), '');
+
+		const fragmentPath = await pagefindFragmentPath();
+		const authenticatedFragment = await harness.fetch(fragmentPath, { headers: { Cookie: await signedSessionCookie() } });
+		assert.equal(authenticatedFragment.status, 200);
+		assert.equal(authenticatedFragment.headers.get('cache-control'), 'private, no-store, max-age=0');
+
+		const anonymousFragment = await harness.fetch(fragmentPath);
+		assert.equal(anonymousFragment.status, 401);
+		assert.equal(anonymousFragment.headers.get('cache-control'), 'no-store');
+		assert.equal(await anonymousFragment.text(), 'Authentication is required to access this resource.');
 	});
 
 	test('provides isolated D1 and invokes the deployed scheduled entrypoint', async () => {

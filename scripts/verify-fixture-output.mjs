@@ -39,15 +39,34 @@ for (const expectedPath of [
 }
 
 const generatedPaths = await walk(outputRoot);
+const outputInventory = {
+	protectedDocumentHtml: generatedPaths.filter(
+		(path) => /^docs\/(?:tutorials|extensions)(?:\/|$)/u.test(path) && path.endsWith('.html')
+	).length,
+	pagefindAssets: generatedPaths.filter((path) => path.startsWith('pagefind/')).length,
+	protectedTutorialImages: generatedPaths.filter((path) => path.startsWith('protected/tutorial-images/')).length,
+	protectedAttachments: generatedPaths.filter((path) => path.startsWith('protected/attachments/')).length,
+};
+
 if (!generatedPaths.some((path) => path.startsWith('pagefind/fragment/'))) {
 	throw new Error('Pagefind fragments were not generated from the fixture corpus.');
 }
 
 const forbiddenOutput = generatedPaths.filter((path) =>
-	/(^|\/)(?:archive|question_banks)(?:\/|$)/u.test(path) || /(?:^|\/)(?:sitemap[^/]*\.xml|rss(?:\.xml)?)(?:$|\/)/iu.test(path)
+	/(^|\/)(?:archive|question_banks)(?:\/|$)/u.test(path) ||
+	/(?:^|\/)(?:sitemap[^/]*\.xml|rss(?:\.xml)?|atom(?:\.xml)?|feed(?:\.xml)?)(?:$|\/)/iu.test(path)
 );
 if (forbiddenOutput.length > 0) {
 	throw new Error(`Fixture build output contains forbidden derived paths: ${forbiddenOutput.join(', ')}`);
 }
 
-console.log('Fixture build contains stable docs routes, protected fixture assets, and Pagefind fragments only.');
+const unprotectedJsonOutput = generatedPaths.filter((path) => path.endsWith('.json') && !path.startsWith('pagefind/'));
+if (unprotectedJsonOutput.length > 0) {
+	throw new Error(`Fixture build output contains unprotected JSON artifacts: ${unprotectedJsonOutput.join(', ')}`);
+}
+
+console.log(
+	`Fixture build inventory: ${outputInventory.protectedDocumentHtml} protected document HTML files, ` +
+		`${outputInventory.pagefindAssets} Pagefind assets, ${outputInventory.protectedTutorialImages} protected tutorial images, and ` +
+		`${outputInventory.protectedAttachments} protected attachments; no unprotected JSON, feed, archive, or question-bank artifacts.`
+);
