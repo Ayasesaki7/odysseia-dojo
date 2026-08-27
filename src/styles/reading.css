@@ -6,7 +6,14 @@
 @media (min-width: 72rem) {
 	.pagination-links {
 		max-inline-size: 45rem;
-		margin-inline-start: auto;
+		margin-inline: auto;
+	}
+}
+
+/* Avoid a lingering touch overlay without hiding keyboard focus indicators. */
+@media (max-width: 49.999rem) {
+	mobile-starlight-toc .isMobile a {
+		-webkit-tap-highlight-color: transparent;
 	}
 }
 

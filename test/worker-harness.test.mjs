@@ -464,27 +464,54 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(await resource.text(), /<svg/u);
 	});
 
-	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
+	test('keeps directory-first indexes and public reading disclosures available', async () => {
 		const headers = { Cookie: await signedSessionCookie() };
-		const [tutorialIndex, extensionIndex, tutorial, extension, outdated, resourcePage] = await Promise.all([
+		const [tutorialIndex, extensionIndex, home] = await Promise.all([
 			harness.fetch('/docs/tutorials/', { headers }),
 			harness.fetch('/docs/extensions/', { headers }),
+			harness.fetch('/'),
+		]);
+		assert.equal(tutorialIndex.status, 200);
+		assert.equal(extensionIndex.status, 200);
+		assert.equal(home.status, 200);
+
+		const tutorialIndexBody = await tutorialIndex.text();
+		const tutorialDirectory = tutorialIndexBody.indexOf('href="/docs/tutorials/discord-and-odysseia/"');
+		const tutorialExplanation = tutorialIndexBody.indexOf('Fixture 说明');
+		assert.ok(tutorialDirectory >= 0, 'The tutorial directory must render.');
+		assert.ok(tutorialExplanation >= 0, 'The fixture explanation must render.');
+		assert.ok(tutorialDirectory < tutorialExplanation, 'The tutorial directory must come first.');
+
+		const extensionIndexBody = await extensionIndex.text();
+		const extensionDirectory = extensionIndexBody.indexOf('href="/docs/extensions/account-safety/"');
+		const extensionScopeNote = extensionIndexBody.indexOf('扩展阅读仅作补充');
+		assert.ok(extensionDirectory >= 0, 'The extension directory must render.');
+		assert.ok(extensionScopeNote >= 0, 'The short extension scope note must render.');
+		assert.ok(extensionDirectory < extensionScopeNote, 'The extension directory must come first.');
+
+		const homeBody = await home.text();
+		assert.match(homeBody, /id="reading"/u);
+		assert.match(homeBody, /基础教程按推荐顺序组织/u);
+		assert.match(homeBody, /扩展阅读用于补充学习/u);
+		assert.match(homeBody, /KKTsN/u);
+		assert.match(homeBody, /@kk1189_61801/u);
+		assert.match(homeBody, /@10091009mc--钓鱼大亨/u);
+		assert.match(homeBody, /@aurelia119/u);
+		assert.match(homeBody, /CC BY-NC 4\.0/u);
+	});
+
+	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
+		const headers = { Cookie: await signedSessionCookie() };
+		const [tutorial, extension, outdated, resourcePage] = await Promise.all([
 			harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers }),
 			harness.fetch('/docs/extensions/account-safety/', { headers }),
 			harness.fetch('/docs/extensions/legacy-interface/', { headers }),
 			harness.fetch('/docs/tutorials/sillytavern-api/', { headers }),
 		]);
-		assert.equal(tutorialIndex.status, 200);
-		assert.equal(extensionIndex.status, 200);
 		assert.equal(tutorial.status, 200);
 		assert.equal(extension.status, 200);
 		assert.equal(outdated.status, 200);
 		assert.equal(resourcePage.status, 200);
-
-		const tutorialIndexBody = await tutorialIndex.text();
-		assert.match(tutorialIndexBody, /基础教程.*答题范围/u);
-		const extensionIndexBody = await extensionIndex.text();
-		assert.match(extensionIndexBody, /扩展阅读.*不.*答题范围/u);
 
 		const tutorialBody = await tutorial.text();
 		assert.match(tutorialBody, /<html lang="zh-CN"/u);
@@ -509,22 +536,39 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal([...extensionBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
 		assert.doesNotMatch(extensionBody, /扩展阅读不属于答题范围/u);
 
-		const stylesheets = [...tutorialBody.matchAll(/<link[^>]+href="([^"]+\.css)"/gu)].map((match) => match[1]);
-		assert.ok(stylesheets.length > 0, 'The reading page must load a stylesheet.');
-		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join('\n');
-		assert.match(stylesheet, /--sl-content-width\s*:\s*min\(66rem,\s*92vw\)/u);
-		assert.match(stylesheet, /\.pagination-links\s*\{\s*max-inline-size\s*:\s*45rem/u);
-		assert.match(stylesheet, /overflow-wrap\s*:\s*anywhere/u);
-
 		const outdatedBody = await outdated.text();
 		assert.match(outdatedBody, /data-outdated-notice/u);
-		assert.match(outdatedBody, /本文部分内容可能已经过时，请结合当前界面和最新说明阅读。/u);
+		assert.match(outdatedBody, /本文部分内容可能已经过时/u);
+		assert.doesNotMatch(outdatedBody, /请结合当前界面和最新说明阅读/u);
+		assert.match(outdatedBody, /<h1\b[^>]*>[\s\S]*?<\/h1>\s*<aside\b[^>]*\bdata-outdated-notice\b/u);
 
 		const resourceBody = await resourcePage.text();
 		assert.match(resourceBody, /src="\/protected\/tutorial-images\/fixture-api-settings\.svg"/u);
 		assert.match(resourceBody, /href="\/protected\/attachments\/fixture-reading-checklist\.txt"/u);
 		assert.doesNotMatch(resourceBody, /_astro\/[^"']*fixture-api-settings/u);
 		assert.match(resourceBody, /（图）/u);
+	});
+
+	test('ships native-compatible reading layout styles', async () => {
+		const response = await harness.fetch('/docs/tutorials/discord-and-odysseia/', {
+			headers: { Cookie: await signedSessionCookie() },
+		});
+		assert.equal(response.status, 200);
+
+		const page = await response.text();
+		const stylesheets = [...page.matchAll(/<link[^>]+href="([^"]+\.css)"/gu)].map((match) => match[1]);
+		assert.ok(stylesheets.length > 0, 'The reading page must load a stylesheet.');
+		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join('\n');
+		assert.match(stylesheet, /--sl-content-width\s*:\s*min\(66rem,\s*92vw\)/u);
+		assert.match(
+			stylesheet,
+			/\.pagination-links\s*\{[^}]*max-inline-size\s*:\s*45rem[^}]*margin-inline\s*:\s*auto/u
+		);
+		assert.match(
+			stylesheet,
+			/mobile-starlight-toc\s+\.isMobile\s+a\s*\{[^}]*-webkit-tap-highlight-color\s*:\s*transparent/u
+		);
+		assert.match(stylesheet, /overflow-wrap\s*:\s*anywhere/u);
 	});
 
 	test('protects the Pagefind bundle and returns fixture matches for Chinese, product, acronym, and details terms', async () => {

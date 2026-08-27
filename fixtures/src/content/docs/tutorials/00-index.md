@@ -9,10 +9,6 @@ sidebar:
   order: 0
 ---
 
-## 推荐顺序
-
-基础教程是可以进入道馆答题范围的核心材料；扩展阅读只提供补充，不进入题库考查范围。
-
 1. [Discord 与类脑 Odysseia](/docs/tutorials/discord-and-odysseia/)
    - 范围：认识 Discord、DC 和社区中阅读教程的基本方式。
 2. [SillyTavern 与 API](/docs/tutorials/sillytavern-api/)

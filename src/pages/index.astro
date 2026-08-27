@@ -16,6 +16,14 @@ import PublicLayout from '../components/PublicLayout.astro';
 			<a class="button" href="/login">前往登录入口</a>
 		</section>
 
+		<section id="reading" aria-labelledby="reading-title">
+			<h2 id="reading-title">教程与答题范围</h2>
+			<p>
+				基础教程按推荐顺序组织，是道馆答题可以考查的核心内容。扩展阅读用于补充学习，不属于题库考查范围，也不替代基础教程的阅读顺序。
+			</p>
+			<p>请通过受保护阅读区的“基础教程”和“扩展阅读”目录选择内容；按问题查找时使用全站搜索。</p>
+		</section>
+
 		<section id="rules" aria-labelledby="rules-title">
 			<h2 id="rules-title">现行答题规则</h2>
 			<ol>
@@ -26,7 +34,6 @@ import PublicLayout from '../components/PublicLayout.astro';
 				<li>同一个道馆多次答错会进入 1 小时冷却；不同道馆之间的冷却彼此独立。</li>
 				<li>每道题的答题时间为 180 秒；超时计作一次失败。</li>
 			</ol>
-			<p class="muted">只有基础教程属于答题范围；扩展阅读用于补充学习。</p>
 		</section>
 
 		<section id="privacy" aria-labelledby="privacy-title">
@@ -61,11 +68,16 @@ import PublicLayout from '../components/PublicLayout.astro';
 
 		<section id="licensing" aria-labelledby="licensing-title">
 			<h2 id="licensing-title">许可与内容边界</h2>
+			<h3>教程署名</h3>
+			<p>
+				基础教程和题库原作者为 KKTsN（橘狐）。扩展阅读保留原有作者署名；主要扩展短文保留 @kk1189_61801 的署名，两篇由其他作者署名的扩展文章分别保留 @10091009mc--钓鱼大亨 和 @aurelia119 的署名。
+			</p>
 			<ul>
 				<li>网站程序适用 <strong>AGPL-3.0-or-later</strong>。</li>
 				<li>运营者有权许可的教程正文、原创图示和附件适用 <strong>CC BY-NC 4.0</strong>。</li>
 				<li>教程中引用的第三方代码、图片、商标或转载内容保留原作者署名和各自条款。</li>
 			</ul>
+			<p>如需订正教程内容，请通过社区联系。</p>
 		</section>
 	</main>
 </PublicLayout>
