@@ -14,21 +14,25 @@ Worker entrypoint, Cloudflare Static Assets with `run_worker_first`, and an
 isolated local D1 binding. No real tutorial material, deployment secret, or
 external Discord request is needed.
 
-The black-box tests use only HTTP requests through that harness. They cover an
-anonymous public page and required `/_astro/` asset; canonical, trailing-slash,
-`index.html`, and encoded protected document/resource aliases; actual Pagefind
-bundle and fragment output; and protected images and attachments. They also
-cover accepted, tampered, expired, forged, and malformed sessions;
+The black-box request tests use only HTTP requests through that harness. They
+cover an anonymous public page and required `/_astro/` asset; canonical,
+trailing-slash, `index.html`, and encoded protected document/resource aliases;
+actual Pagefind bundle and fragment output; and protected images and
+attachments. They also cover accepted, tampered, expired, forged, and malformed
+sessions;
 authentication/classification/routing failures; private cache headers and an
 authenticated-then-anonymous reuse attempt. The OAuth start/callback/logout,
 return-target, distinct failure-state, and D1 OAuth-activity checks remain at
 the same boundary. Authenticated observation requests cover server-derived
 context, no-store responses, per-Session D1 idempotence, and retry after a
-failed write. Authenticated reading checks also exercise the native Starlight
-navigation and page features. The Pagefind check loads the generated bundle
-against the same Worker URL and searches fixture Chinese, product, acronym, and
-`<details>` terms. The test signer and its fixed secret live only under
-`test/support/`; production code only receives configured secrets.
+failed write. The same isolated D1 binding seeds retention-boundary records and
+invokes the deployed `scheduled()` entrypoint repeatedly to prove bounded
+expiry cleanup without a browser-facing trigger. Authenticated reading checks
+also exercise the native Starlight navigation and page features. The Pagefind
+check loads the generated bundle against the same Worker URL and searches
+fixture Chinese, product, acronym, and `<details>` terms. The test signer and
+its fixed secret live only under `test/support/`; production code only receives
+configured secrets.
 
 The OAuth routes and their D1 activity write are Astro `src/pages/api/**`
 endpoints, while `src/middleware.ts` applies the shared Session policy to

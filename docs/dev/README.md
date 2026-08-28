@@ -9,6 +9,7 @@ the facts owned by their destination pages.
 | Orient myself in the repository, its content inputs, request path, or build path | [Code-map overview](code-map/overview.md) | Current layout and cross-cutting flow ownership. |
 | Change protected delivery, Sessions, Cookies, OAuth routes, `auth_activity`, or the deployed Worker seam | [Request and access map](code-map/request-access.md) | Worker-first request handling and access-related source owners. |
 | Change browser observation collection, `/api/fingerprint`, per-Session D1 persistence, or its trust boundary | [Browser observation map](code-map/observation.md) | Current browser and server observation owners. |
+| Run V1 D1 retention, a fixed investigation query, or a verified-account deletion | [Data retention and investigation runbook](../data-retention-and-investigation.md) | Account-admin procedure and the fixed SQL catalog. |
 | Find an npm command, script, generated artifact check, migration, or test harness | [Tooling map](code-map/tooling.md) | Current command and tooling owners. |
 | Decide which documentation authority to update or how to validate a documentation change | [Documentation workflows](workflows.md) | Writeback routing and documentation-integrity evidence. |
 | Work with fixture or trusted-local content input | [Content assembly contract](../content-assembly.md) | The authoritative operational content-assembly contract. |

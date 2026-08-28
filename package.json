@@ -14,7 +14,7 @@
     "content:local": "node scripts/content-assembly.mjs local",
     "dev": "astro dev",
     "check": "npm run content:fixtures && astro check",
-		"test": "npm run content:fixtures && node --test test/content-assembly.test.mjs test/public-build-config.test.mjs test/observation-logic.test.mjs test/observation-client.test.mjs",
+		"test": "npm run content:fixtures && node --test test/content-assembly.test.mjs test/public-build-config.test.mjs test/observation-logic.test.mjs test/observation-client.test.mjs test/investigation-queries.test.mjs",
     "test:worker": "npm run build && node --test test/worker-harness.test.mjs",
 		"build": "npm run content:fixtures && node scripts/validate-public-build-config.mjs && astro build && node scripts/verify-fixture-output.mjs",
     "validate": "npm run test && npm run check && npm run build && node --test test/worker-harness.test.mjs",

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -152,6 +152,36 @@ async function submitFingerprint(payload = fingerprintPayload(), options = {}) {
 async function observationCount(env) {
 	const result = await env.DB.prepare('SELECT COUNT(*) AS count FROM fingerprint_observations').first();
 	return result?.count;
+}
+
+async function activityCount(env, table) {
+	const result = await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first();
+	return result?.count;
+}
+
+async function seedRetentionActivity(env, timestamp, count, prefix) {
+	const statements = [];
+	for (let index = 0; index < count; index += 1) {
+		statements.push(
+			env.DB
+				.prepare(
+					'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?, ?, ?, ?, ?)'
+				)
+				.bind(
+					`${prefix}-observation-${index}`,
+					`${prefix}-discord-user-${index}`,
+					`${prefix}-session-${index}`,
+					`${prefix}-ip-${index}`,
+					timestamp
+				),
+			env.DB
+				.prepare(
+					'INSERT INTO auth_activity (discord_user_id, discord_username_snapshot, last_successful_oauth_at) VALUES (?, ?, ?)'
+				)
+				.bind(`${prefix}-auth-user-${index}`, `${prefix}-member-${index}`, timestamp)
+		);
+	}
+	await env.DB.batch(statements);
 }
 
 function jsonResponse(value, status = 200) {
@@ -866,22 +896,33 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(await anonymousFragment.text(), 'Authentication is required to access this resource.');
 	});
 
-	test('provides isolated D1 and invokes the deployed scheduled entrypoint', async () => {
-		const result = await worker.scheduled({
-			cron: '0 0 * * *',
-			scheduledTime: new Date('2026-08-26T00:00:00.000Z'),
-		});
-		assert.equal(result.outcome, 'ok');
+	test('cleans expired activity in bounded batches through the deployed scheduled entrypoint', async () => {
+		const env = await applyD1Migrations();
+		const scheduledTime = new Date('2026-08-26T00:00:00.000Z');
+		const expiredAt = '2026-05-27T23:59:59.999Z';
+		const retentionBoundary = '2026-05-28T00:00:00.000Z';
+		const deployedConfig = JSON.parse(await readFile(resolve(projectRoot, 'dist/server/wrangler.json'), 'utf8'));
+		assert.deepEqual(deployedConfig.triggers?.crons, ['0 0 * * *']);
 
-		const env = await worker.getEnv();
-		await env.DB.prepare('CREATE TABLE seam_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
-		await env.DB.prepare('INSERT INTO seam_state (key, value) VALUES (?, ?)')
-			.bind('scheduled-entrypoint', 'available')
-			.run();
-		const row = await env.DB.prepare('SELECT value FROM seam_state WHERE key = ?')
-			.bind('scheduled-entrypoint')
-			.first();
-		assert.equal(row?.value, 'available');
+		await seedRetentionActivity(env, expiredAt, 101, 'expired');
+		await seedRetentionActivity(env, retentionBoundary, 1, 'retained');
+
+		const firstRun = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
+		assert.equal(firstRun.outcome, 'ok');
+		assert.equal(await activityCount(env, 'fingerprint_observations'), 2);
+		assert.equal(await activityCount(env, 'auth_activity'), 2);
+
+		const secondRun = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
+		assert.equal(secondRun.outcome, 'ok');
+		assert.equal(await activityCount(env, 'fingerprint_observations'), 1);
+		assert.equal(await activityCount(env, 'auth_activity'), 1);
+
+		const [observation, oauthActivity] = await Promise.all([
+			env.DB.prepare('SELECT captured_at FROM fingerprint_observations').first(),
+			env.DB.prepare('SELECT last_successful_oauth_at FROM auth_activity').first(),
+		]);
+		assert.deepEqual(observation, { captured_at: retentionBoundary });
+		assert.deepEqual(oauthActivity, { last_successful_oauth_at: retentionBoundary });
 	});
 
 	test('keeps future Discord egress controllable without contacting Discord', async () => {

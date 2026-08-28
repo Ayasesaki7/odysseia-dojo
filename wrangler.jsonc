@@ -22,6 +22,9 @@
 			"migrations_dir": "migrations"
 		}
 	],
+	"triggers": {
+		"crons": ["0 0 * * *"]
+	},
 	"vars": {
 		"DISCORD_GUILD_ID": "1134557553011998840"
 	},

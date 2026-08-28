@@ -1,5 +1,6 @@
 import { handle } from '@astrojs/cloudflare/handler';
 
+import { removeExpiredActivity } from './lib/data-retention';
 import { applyProtectedAccessPolicy } from './lib/protected-access';
 
 export default {
@@ -7,7 +8,7 @@ export default {
 		return applyProtectedAccessPolicy(request, env.SESSION_SECRET, () => handle(request, env, context));
 	},
 
-	async scheduled(_controller, _env, context) {
-		context.waitUntil(Promise.resolve());
+	async scheduled(controller, env) {
+		await removeExpiredActivity(env.DB, controller.scheduledTime);
 	},
 } satisfies ExportedHandler<Env>;

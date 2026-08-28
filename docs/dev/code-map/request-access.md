@@ -9,7 +9,7 @@ for running that check.
 
 | What I need to change | Source owner and stable entrypoint | Current responsibility |
 | --- | --- | --- |
-| Worker-first handling of every deployed request | [`src/worker.ts`](../../../src/worker.ts), `fetch` | Calls the shared protected-access policy before the Astro Cloudflare handler delegates to Static Assets or Astro routes. |
+| Worker-first handling and daily D1 lifecycle | [`src/worker.ts`](../../../src/worker.ts), `fetch` and `scheduled` | Calls the shared protected-access policy before the Astro Cloudflare handler delegates to Static Assets or Astro routes, and delegates the daily retention lifecycle to its narrow D1 owner. |
 | Protected-path classification, Session gate, denial, and protected-response cache policy | [`src/lib/protected-access.ts`](../../../src/lib/protected-access.ts), `applyProtectedAccessPolicy()` | Shared module used by both Worker and Astro middleware. It classifies protected documents, Pagefind output, and protected resources before continuation. |
 | Astro-rendered request handling | [`src/middleware.ts`](../../../src/middleware.ts), `onRequest` | Applies `applyProtectedAccessPolicy()` to non-prerendered Astro routes. |
 | Session claims, signing, verification, and Session Cookie lifecycle | [`src/lib/session.ts`](../../../src/lib/session.ts), `issueSession()`, `verifySession()`, `sessionCookie()`, and `clearSessionCookie()` | Owns the signed Session interface. [`src/lib/cookies.ts`](../../../src/lib/cookies.ts) serializes secure Cookies; [`src/lib/session-contract.js`](../../../src/lib/session-contract.js) owns the shared cookie name. |
@@ -17,6 +17,7 @@ for running that check.
 | OAuth response construction and failure redirects | [`src/lib/oauth-responses.ts`](../../../src/lib/oauth-responses.ts) | Owns shared OAuth redirects and cookie clearing. |
 | OAuth HTTP endpoints | [`discord.ts`](../../../src/pages/api/auth/discord.ts), [`callback.ts`](../../../src/pages/api/auth/callback.ts), and [`logout.ts`](../../../src/pages/api/auth/logout.ts) | Start, complete, and end the OAuth/Session flow. |
 | Authenticated browser-observation endpoint | [`fingerprint.ts`](../../../src/pages/api/fingerprint.ts) and [`src/lib/observation.ts`](../../../src/lib/observation.ts), `recordFingerprintObservation()` | Verifies the Session and records an idempotent observation. The [browser observation map](observation.md) owns its collection, trust, persistence, and test details. |
+| Daily retention cleanup | [`src/lib/data-retention.ts`](../../../src/lib/data-retention.ts), `removeExpiredActivity()` | Uses the scheduled event time for fixed, parameterized, bounded D1 removal from the two V1 activity tables. The [data-retention runbook](../../data-retention-and-investigation.md) owns manual operations. |
 
 The callback's `recordAuthActivity()` is the current D1 write owner. It upserts
 the verified member's OAuth activity through `env.DB`; if that write fails, the
