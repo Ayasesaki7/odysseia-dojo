@@ -5,6 +5,11 @@ non-sensitive fixtures, and public validation. It never stores real tutorials,
 protected resources, archives, question banks, private content credentials, or
 production Secrets.
 
+## Developer navigation
+
+For task-oriented code maps, operational-document routing, and documentation
+writeback ownership, start at [Developer documentation](docs/dev/README.md).
+
 ## Requirements
 
 - Node.js 24
