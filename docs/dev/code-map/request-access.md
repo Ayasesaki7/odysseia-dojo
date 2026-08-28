@@ -16,6 +16,7 @@ for running that check.
 | OAuth state, safe return target, Discord exchange, identity, and Guild membership | [`src/lib/discord-oauth.ts`](../../../src/lib/discord-oauth.ts), `startDiscordOAuth()`, `consumeOAuthState()`, and `authenticateDiscordMember()` | Owns OAuth-state lifecycle and the Discord-facing authentication implementation. |
 | OAuth response construction and failure redirects | [`src/lib/oauth-responses.ts`](../../../src/lib/oauth-responses.ts) | Owns shared OAuth redirects and cookie clearing. |
 | OAuth HTTP endpoints | [`discord.ts`](../../../src/pages/api/auth/discord.ts), [`callback.ts`](../../../src/pages/api/auth/callback.ts), and [`logout.ts`](../../../src/pages/api/auth/logout.ts) | Start, complete, and end the OAuth/Session flow. |
+| Authenticated browser-observation endpoint | [`fingerprint.ts`](../../../src/pages/api/fingerprint.ts) and [`src/lib/observation.ts`](../../../src/lib/observation.ts), `recordFingerprintObservation()` | Verifies the Session and records an idempotent observation. The [browser observation map](observation.md) owns its collection, trust, persistence, and test details. |
 
 The callback's `recordAuthActivity()` is the current D1 write owner. It upserts
 the verified member's OAuth activity through `env.DB`; if that write fails, the

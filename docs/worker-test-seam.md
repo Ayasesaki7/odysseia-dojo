@@ -22,11 +22,13 @@ cover accepted, tampered, expired, forged, and malformed sessions;
 authentication/classification/routing failures; private cache headers and an
 authenticated-then-anonymous reuse attempt. The OAuth start/callback/logout,
 return-target, distinct failure-state, and D1 OAuth-activity checks remain at
-the same boundary. Authenticated reading checks also exercise the native
-Starlight navigation and page features. The Pagefind check loads the generated
-bundle against the same Worker URL and searches fixture Chinese, product,
-acronym, and `<details>` terms. The test signer and its fixed secret live only
-under `test/support/`; production code only receives configured secrets.
+the same boundary. Authenticated observation requests cover server-derived
+context, no-store responses, per-Session D1 idempotence, and retry after a
+failed write. Authenticated reading checks also exercise the native Starlight
+navigation and page features. The Pagefind check loads the generated bundle
+against the same Worker URL and searches fixture Chinese, product, acronym, and
+`<details>` terms. The test signer and its fixed secret live only under
+`test/support/`; production code only receives configured secrets.
 
 The OAuth routes and their D1 activity write are Astro `src/pages/api/**`
 endpoints, while `src/middleware.ts` applies the shared Session policy to

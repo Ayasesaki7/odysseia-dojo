@@ -1,0 +1,1 @@
+export const OBSERVATION_PAYLOAD_VERSION = 1;

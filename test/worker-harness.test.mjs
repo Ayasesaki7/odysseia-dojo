@@ -14,6 +14,7 @@ const TEST_DISCORD_CLIENT_SECRET = 'test-discord-client-secret';
 const TEST_DISCORD_REDIRECT_URI = 'https://dojo.test/api/auth/callback';
 const TEST_DISCORD_GUILD_ID = '1134557553011998840';
 const TEST_DISCORD_ACCESS_TOKEN = 'test-discord-access-token';
+const TEST_ANTICHEAT_HASH_SECRET = '0123456789abcdef0123456789abcdef';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '..');
@@ -28,6 +29,7 @@ const harness = createTestHarness({
 					DISCORD_CLIENT_SECRET: TEST_DISCORD_CLIENT_SECRET,
 					DISCORD_REDIRECT_URI: TEST_DISCORD_REDIRECT_URI,
 					DISCORD_GUILD_ID: TEST_DISCORD_GUILD_ID,
+					ANTICHEAT_HASH_SECRET: TEST_ANTICHEAT_HASH_SECRET,
 				},
 			},
 	],
@@ -107,10 +109,49 @@ async function finishOAuth(start, params = {}) {
 	});
 }
 
-async function createAuthActivityTable() {
+async function applyD1Migrations() {
 	const env = await worker.getEnv();
 	await worker.applyD1Migrations('DB');
 	return env;
+}
+
+function fingerprintPayload(overrides = {}) {
+	return {
+		payloadVersion: 1,
+		browserFingerprint: 'fixture-browser-fingerprint',
+		canvasHash: 'fixture-canvas-hash',
+		webglHash: 'fixture-webgl-hash',
+		platform: 'FixtureOS',
+		timezone: 'Asia/Hong_Kong',
+		screenResolution: '1920x1080',
+		language: 'zh-CN',
+		...overrides,
+	};
+}
+
+async function submitFingerprint(payload = fingerprintPayload(), options = {}) {
+	const cookie = options.cookie === undefined ? await signedSessionCookie() : options.cookie;
+	const headers = new Headers({
+		'content-type': 'application/json',
+		'user-agent': options.userAgent ?? 'FixtureBrowser/1.0',
+	});
+	if (cookie) headers.set('Cookie', cookie);
+	if (options.ip !== null) headers.set('cf-connecting-ip', options.ip ?? '203.0.113.45');
+
+	return harness.fetch('/api/fingerprint', {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(payload),
+		cf: {
+			country: options.country ?? 'HK',
+			asn: options.asn ?? 13335,
+		},
+	});
+}
+
+async function observationCount(env) {
+	const result = await env.DB.prepare('SELECT COUNT(*) AS count FROM fingerprint_observations').first();
+	return result?.count;
 }
 
 function jsonResponse(value, status = 200) {
@@ -296,7 +337,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	});
 
 	test('issues a fixed session after identity and paginated Guild membership verification', async () => {
-		const env = await createAuthActivityTable();
+		const env = await applyD1Migrations();
 		const firstPage = Array.from({ length: 200 }, (_, index) => ({ id: String(index + 1) }));
 		const start = await beginOAuth('/docs/tutorials/discord-and-odysseia/?source=login#search-terms');
 
@@ -408,7 +449,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	});
 
 	test('falls back to the tutorial root for unsafe OAuth return targets', async () => {
-		await createAuthActivityTable();
+		await applyD1Migrations();
 		for (const unsafeReturnTo of [
 			'//example.invalid/steal',
 			'https://example.invalid/steal',
@@ -457,6 +498,100 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(cookie, /SameSite=Lax/u);
 		assert.match(cookie, /Path=\//u);
 		assert.match(cookie, /Max-Age=0/u);
+	});
+
+	test('records a single authenticated observation from trusted server context', async () => {
+		const env = await applyD1Migrations();
+		const first = await submitFingerprint();
+		assert.equal(first.status, 204);
+		assert.equal(first.headers.get('cache-control'), 'no-store');
+		assert.equal(await first.text(), '');
+
+		const row = await env.DB
+			.prepare(
+				`SELECT discord_user_id, discord_username_snapshot, session_id_hash,
+				 browser_fingerprint_hash, canvas_hash, webgl_hash, user_agent_hash,
+				 platform, timezone, screen_resolution, language, ip_hash, ip_prefix_hash,
+				 country, asn, payload_version, hash_key_version, captured_at
+				 FROM fingerprint_observations`
+			)
+			.first();
+		const { captured_at: capturedAt, ...storedObservation } = row ?? {};
+		assert.deepEqual(storedObservation, {
+			discord_user_id: '123456789012345678',
+			discord_username_snapshot: 'fixture-member',
+			session_id_hash: '693a16da541907663959787e855b6b62c35681eb24e6768de8e296c1ddc95aac',
+			browser_fingerprint_hash: '80a34e9a54d59c71dffea5a98b9ff3be51e3c04486c048da6df8bfa86d49bcbc',
+			canvas_hash: '0ccad888e994438b6f8e8ad354b9422687955df3636e06cbfcf23fb9013a3c8c',
+			webgl_hash: 'ed8c51e4774b3e4de8f70ec623c6baceacdb3165e8e7e7b8dd598f614499ca50',
+			user_agent_hash: 'a6f9d39f3f9ad84db619b1df458c882b86c6ef73a700246b1cf7d2302688a15c',
+			platform: 'FixtureOS',
+			timezone: 'Asia/Hong_Kong',
+			screen_resolution: '1920x1080',
+			language: 'zh-CN',
+			ip_hash: '8e92c20dee08a0072490306807fd2e9caeee87f51fbe65b5899945bab3cc19a0',
+			ip_prefix_hash: 'bbf66f093fcad99656736f74a2b11247454720554e0aeabb62047587d9e8cf53',
+			country: 'HK',
+			asn: 13335,
+			payload_version: 1,
+			hash_key_version: 1,
+		});
+		assert.match(capturedAt ?? '', /^\d{4}-\d{2}-\d{2}T/u);
+
+		const duplicate = await submitFingerprint();
+		assert.equal(duplicate.status, 204);
+		assert.equal(duplicate.headers.get('cache-control'), 'no-store');
+		assert.equal(await observationCount(env), 1);
+
+		const oauthActivity = await env.DB.prepare('SELECT discord_user_id FROM auth_activity').all();
+		assert.deepEqual(oauthActivity.results, []);
+	});
+
+	test('rejects client-controlled trusted fields and missing server context without writing an observation', async () => {
+		const env = await applyD1Migrations();
+		const unauthenticated = await submitFingerprint(fingerprintPayload(), { cookie: null });
+		assert.equal(unauthenticated.status, 401);
+		assert.equal(unauthenticated.headers.get('cache-control'), 'no-store');
+
+		const spoofed = await submitFingerprint(
+			fingerprintPayload({
+				discordUserId: 'forged-discord-id',
+				ip: '198.51.100.9',
+				userAgent: 'forged-user-agent',
+				capturedAt: '2000-01-01T00:00:00.000Z',
+			}),
+		);
+		assert.equal(spoofed.status, 400);
+		assert.equal(spoofed.headers.get('cache-control'), 'no-store');
+
+		const unusableTrustedIp = await submitFingerprint(fingerprintPayload(), { ip: 'not-a-valid-ip' });
+		assert.equal(unusableTrustedIp.status, 503);
+		assert.equal(unusableTrustedIp.headers.get('cache-control'), 'no-store');
+		assert.equal(await observationCount(env), 0);
+	});
+
+	test('keeps a failed observation write retryable for the same Session', async () => {
+		const env = await applyD1Migrations();
+		await env.DB
+			.prepare(
+				`CREATE TRIGGER force_observation_insert_failure
+				 BEFORE INSERT ON fingerprint_observations
+				 BEGIN
+					SELECT RAISE(ABORT, 'fixture observation write failure');
+				 END`
+			)
+			.run();
+
+		const failed = await submitFingerprint();
+		assert.equal(failed.status, 503);
+		assert.equal(failed.headers.get('cache-control'), 'no-store');
+		assert.equal(await observationCount(env), 0);
+
+		await env.DB.prepare('DROP TRIGGER force_observation_insert_failure').run();
+		const retry = await submitFingerprint();
+		assert.equal(retry.status, 204);
+		assert.equal(retry.headers.get('cache-control'), 'no-store');
+		assert.equal(await observationCount(env), 1);
 	});
 
 	test('fails closed for anonymous protected document and resource requests', async () => {
@@ -601,6 +736,9 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(tutorialBody, /starlight-menu-button/u);
 		assert.match(tutorialBody, /starlight-theme-select/u);
 		assert.match(tutorialBody, /data-content-category="tutorial"/u);
+		assert.match(tutorialBody, /data-observation-status/u);
+		assert.match(tutorialBody, /data-observation-retry/u);
+		assert.match(tutorialBody, /重新记录防代打观测/u);
 		assert.equal([...tutorialBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
 		assert.doesNotMatch(tutorialBody, /基础教程属于答题范围/u);
 

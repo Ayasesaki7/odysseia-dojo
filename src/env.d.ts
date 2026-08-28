@@ -4,6 +4,7 @@ interface DojoEnvironment {
 	ASSETS: Fetcher;
 	DB: D1Database;
 	SESSION_SECRET: string;
+	ANTICHEAT_HASH_SECRET: string;
 	DISCORD_CLIENT_ID: string;
 	DISCORD_CLIENT_SECRET: string;
 	DISCORD_REDIRECT_URI: string;
