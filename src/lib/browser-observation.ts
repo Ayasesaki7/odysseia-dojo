@@ -81,7 +81,7 @@ function renderObservationState(status: HTMLElement | null, retry: HTMLButtonEle
 
 	if (status) {
 		status.hidden = false;
-		status.textContent = '防代打观测未记录，请重试。';
+		status.textContent = '防代打观测未记录，请重试';
 	}
 	if (retry) retry.hidden = false;
 }
