@@ -159,7 +159,7 @@ async function activityCount(env, table) {
 	return result?.count;
 }
 
-async function seedRetentionActivity(env, timestamp, count, prefix) {
+async function seedRetentionObservations(env, timestamp, count, prefix) {
 	const statements = [];
 	for (let index = 0; index < count; index += 1) {
 		statements.push(
@@ -173,7 +173,16 @@ async function seedRetentionActivity(env, timestamp, count, prefix) {
 					`${prefix}-session-${index}`,
 					`${prefix}-ip-${index}`,
 					timestamp
-				),
+					)
+		);
+	}
+	await env.DB.batch(statements);
+}
+
+async function seedRetentionOAuthActivity(env, timestamp, count, prefix) {
+	const statements = [];
+	for (let index = 0; index < count; index += 1) {
+		statements.push(
 			env.DB
 				.prepare(
 					'INSERT INTO auth_activity (discord_user_id, discord_username_snapshot, last_successful_oauth_at) VALUES (?, ?, ?)'
@@ -182,6 +191,11 @@ async function seedRetentionActivity(env, timestamp, count, prefix) {
 		);
 	}
 	await env.DB.batch(statements);
+}
+
+async function seedRetentionActivity(env, timestamp, count, prefix) {
+	await seedRetentionObservations(env, timestamp, count, prefix);
+	await seedRetentionOAuthActivity(env, timestamp, count, prefix);
 }
 
 function jsonResponse(value, status = 200) {
@@ -323,7 +337,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(homeBody, /<summary>查看完整隐私说明<\/summary>/u);
 		assert.match(homeBody, /<summary>查看教程署名、许可与内容边界<\/summary>/u);
 		assert.match(homeBody, /HMAC-SHA256/u);
-		assert.match(homeBody, /活跃业务记录最多保留 90 天/u);
+		assert.match(homeBody, /超过 90 天后进入每日定时清理范围/u);
+		assert.match(homeBody, /下一次成功清理/u);
 		assert.match(homeBody, /最多可能额外保留 7 天/u);
 		assert.match(homeBody, /请通过社区联系/u);
 		assert.match(homeBody, /AGPL-3\.0-or-later/u);
@@ -896,7 +911,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(await anonymousFragment.text(), 'Authentication is required to access this resource.');
 	});
 
-	test('cleans expired activity in bounded batches through the deployed scheduled entrypoint', async () => {
+	test('cleans expired activity through bounded paired batches and preserves the exact cutoff boundary', async () => {
 		const env = await applyD1Migrations();
 		const scheduledTime = new Date('2026-08-26T00:00:00.000Z');
 		const expiredAt = '2026-05-27T23:59:59.999Z';
@@ -904,18 +919,21 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		const deployedConfig = JSON.parse(await readFile(resolve(projectRoot, 'dist/server/wrangler.json'), 'utf8'));
 		assert.deepEqual(deployedConfig.triggers?.crons, ['0 0 * * *']);
 
-		await seedRetentionActivity(env, expiredAt, 101, 'expired');
+		await seedRetentionActivity(env, expiredAt, 401, 'expired');
 		await seedRetentionActivity(env, retentionBoundary, 1, 'retained');
+		harness.clearLogs();
 
-		const firstRun = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
-		assert.equal(firstRun.outcome, 'ok');
-		assert.equal(await activityCount(env, 'fingerprint_observations'), 2);
-		assert.equal(await activityCount(env, 'auth_activity'), 2);
-
-		const secondRun = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
-		assert.equal(secondRun.outcome, 'ok');
+		const cleanup = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
+		assert.equal(cleanup.outcome, 'ok');
 		assert.equal(await activityCount(env, 'fingerprint_observations'), 1);
 		assert.equal(await activityCount(env, 'auth_activity'), 1);
+		assert.deepEqual(
+			harness
+				.getLogs()
+				.filter((log) => log.level === 'error')
+				.map((log) => log.message),
+			[]
+		);
 
 		const [observation, oauthActivity] = await Promise.all([
 			env.DB.prepare('SELECT captured_at FROM fingerprint_observations').first(),
@@ -923,6 +941,38 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		]);
 		assert.deepEqual(observation, { captured_at: retentionBoundary });
 		assert.deepEqual(oauthActivity, { last_successful_oauth_at: retentionBoundary });
+	});
+
+	test('caps a skewed retention cleanup after five paired batches and emits a redacted signal', async () => {
+		const env = await applyD1Migrations();
+		const scheduledTime = new Date('2026-08-26T00:00:00.000Z');
+		const expiredAt = '2026-05-27T23:59:59.999Z';
+		const retentionBoundary = '2026-05-28T00:00:00.000Z';
+
+		await seedRetentionObservations(env, expiredAt, 501, 'expired');
+		await seedRetentionOAuthActivity(env, expiredAt, 1, 'expired');
+		await seedRetentionObservations(env, retentionBoundary, 1, 'retained');
+		await seedRetentionOAuthActivity(env, retentionBoundary, 1, 'retained');
+		harness.clearLogs();
+
+		const cleanup = await worker.scheduled({ cron: '0 0 * * *', scheduledTime });
+		assert.equal(cleanup.outcome, 'ok');
+		assert.equal(await activityCount(env, 'fingerprint_observations'), 2);
+		assert.equal(await activityCount(env, 'auth_activity'), 1);
+
+		const [observations, oauthActivity] = await Promise.all([
+			env.DB.prepare('SELECT captured_at FROM fingerprint_observations ORDER BY captured_at ASC').all(),
+			env.DB.prepare('SELECT last_successful_oauth_at FROM auth_activity').all(),
+		]);
+		assert.deepEqual(observations.results, [{ captured_at: expiredAt }, { captured_at: retentionBoundary }]);
+		assert.deepEqual(oauthActivity.results, [{ last_successful_oauth_at: retentionBoundary }]);
+
+		const errors = harness
+			.getLogs()
+			.filter((log) => log.level === 'error')
+			.map((log) => log.message);
+		assert.deepEqual(errors, ['Retention cleanup reached its configured batch cap.']);
+		assert.doesNotMatch(errors.join('\n'), /expired|retained|2026-|cookie|token|secret|ip/u);
 	});
 
 	test('keeps future Discord egress controllable without contacting Discord', async () => {

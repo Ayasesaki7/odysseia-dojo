@@ -38,7 +38,7 @@ import PublicLayout from '../components/PublicLayout.astro';
 
 				<h3>保留、删除与位置提示</h3>
 				<p>
-					活跃业务记录最多保留 90 天；删除后，Cloudflare Workers Free 的灾难恢复副本最多可能额外保留 7 天。确认 Discord 账号控制权后，如需查询或提前删除与该账号关联的活跃业务记录，请通过社区联系。
+					活跃业务记录超过 90 天后进入每日定时清理范围；正常运行时，下一次成功清理会删除它们。每次清理最多连续执行五轮，每轮每张表最多删除 100 条。删除后，Cloudflare Workers Free 的灾难恢复副本最多可能额外保留 7 天。确认 Discord 账号控制权后，如需查询或提前删除与该账号关联的活跃业务记录，请通过社区联系。
 				</p>
 				<p>
 					D1 使用 <code>apac</code> location hint 作为延迟偏好；这不是香港、中国大陆或任何特定地区的数据驻留承诺。

@@ -1,5 +1,7 @@
 const RETENTION_DAYS = 90;
 const CLEANUP_BATCH_SIZE = 100;
+const CLEANUP_MAX_ROUNDS = 5;
+const CLEANUP_CAP_REACHED_SIGNAL = 'Retention cleanup reached its configured batch cap.';
 
 const DELETE_EXPIRED_OBSERVATIONS = `
 	DELETE FROM fingerprint_observations
@@ -31,8 +33,20 @@ function retentionCutoff(scheduledTime: number): string {
 
 export async function removeExpiredActivity(db: D1Database, scheduledTime: number): Promise<void> {
 	const cutoff = retentionCutoff(scheduledTime);
-	await db.batch([
-		db.prepare(DELETE_EXPIRED_OBSERVATIONS).bind(cutoff, CLEANUP_BATCH_SIZE),
-		db.prepare(DELETE_EXPIRED_OAUTH_ACTIVITY).bind(cutoff, CLEANUP_BATCH_SIZE),
-	]);
+
+	for (let round = 0; round < CLEANUP_MAX_ROUNDS; round += 1) {
+		const [observationResult, oauthActivityResult] = await db.batch([
+			db.prepare(DELETE_EXPIRED_OBSERVATIONS).bind(cutoff, CLEANUP_BATCH_SIZE),
+			db.prepare(DELETE_EXPIRED_OAUTH_ACTIVITY).bind(cutoff, CLEANUP_BATCH_SIZE),
+		]);
+
+		if (
+			observationResult.meta.changes < CLEANUP_BATCH_SIZE &&
+			oauthActivityResult.meta.changes < CLEANUP_BATCH_SIZE
+		) {
+			return;
+		}
+	}
+
+	console.error(CLEANUP_CAP_REACHED_SIGNAL);
 }

@@ -9,18 +9,27 @@ integration, an audit table, or an arbitrary-SQL network interface.
 
 [`wrangler.jsonc`](../wrangler.jsonc) configures the deployed Worker to run at
 `0 0 * * *` (00:00 UTC) every day. Its `scheduled()` entrypoint removes, in a
-bounded batch of 100 rows per table, records strictly older than 90 days using
-the scheduled event time:
+bounded cleanup, records strictly older than 90 days using the scheduled event
+time:
 
 - `fingerprint_observations.captured_at` is the observation retention clock.
 - `auth_activity.last_successful_oauth_at` is the OAuth-activity retention
   clock.
 
-The strict boundary means a row exactly 90 days old is retained until a later
-run. A later scheduled run processes the next bounded batch, so use the
-Dashboard's Cron Events and D1 capacity views to confirm the job continues to
-run. Do not add request-path cleanup, browser behavior, or a manual public
-trigger.
+Each scheduled invocation performs at most five sequential paired batches. A
+pair is one small D1 transaction containing the existing fixed, parameterized
+deletes for both tables with the same cutoff; each delete is limited to 100
+rows. The job stops early when both deletes remove fewer than 100 rows. If all
+five rounds run without that early stop, it emits the fixed redacted Worker
+error `Retention cleanup reached its configured batch cap.` and nothing from the
+database.
+
+Records older than 90 days are eligible for this daily cleanup. Under normal
+operation, the next successful cleanup removes them; this is not an absolute
+90-day deletion deadline. The strict boundary means a row exactly 90 days old
+is retained until a later run. Use the Dashboard's Cron Events, the fixed
+cap-reached signal, and D1 capacity views to confirm the job continues to run.
+Do not add request-path cleanup, browser behavior, or a manual public trigger.
 
 ## Fixed query catalog
 
@@ -90,11 +99,11 @@ to reverse an early-deletion request. It is only for disaster recovery.
 
 ## Recovery and capacity limits
 
-Active business records have a maximum 90-day retention period. A D1 disaster
-recovery copy can remain for at most an additional 7 days, so the maximum
-single-period disclosure is 97 days. Early deletion does not erase an existing
-recovery copy immediately, and that copy must not be restored to evade the
-request.
+After an activity business record is deleted, a D1 disaster-recovery copy can
+remain for at most an additional 7 days. Early deletion does not erase an
+existing recovery copy immediately, and that copy must not be restored to evade
+the request. Do not describe the cleanup eligibility rule and recovery window
+as an absolute 90-day or 97-day deletion deadline.
 
 Monitor D1 capacity before the Free limit is reached. If capacity approaches a
 limit, first investigate unusual traffic, avoid broad or repeated query runs,

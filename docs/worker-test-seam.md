@@ -25,9 +25,10 @@ authenticated-then-anonymous reuse attempt. The OAuth start/callback/logout,
 return-target, distinct failure-state, and D1 OAuth-activity checks remain at
 the same boundary. Authenticated observation requests cover server-derived
 context, no-store responses, per-Session D1 idempotence, and retry after a
-failed write. The same isolated D1 binding seeds retention-boundary records and
-invokes the deployed `scheduled()` entrypoint repeatedly to prove bounded
-expiry cleanup without a browser-facing trigger. Authenticated reading checks
+failed write. The same isolated D1 binding seeds exact-boundary and skewed
+retention records, then invokes the deployed `scheduled()` entrypoint to prove
+the five-round bounded expiry cleanup and its redacted cap-reached signal
+without a browser-facing trigger. Authenticated reading checks
 also exercise the native Starlight navigation and page features. The Pagefind
 check loads the generated bundle against the same Worker URL and searches
 fixture Chinese, product, acronym, and `<details>` terms. The test signer and
