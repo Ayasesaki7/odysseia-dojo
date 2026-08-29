@@ -1,5 +1,6 @@
 const placeholderHosts = new Set(['example.com', 'example.org', 'example.net', 'localhost']);
 const fullCommitSha = /^[a-f0-9]{40}$/u;
+const publicRepositoryName = 'odysseia-dojo';
 
 function isPlaceholderHost(hostname) {
 	return (
@@ -34,6 +35,9 @@ function requiredGitHubRepositoryUrl(value, name) {
 
 	if (url.hostname !== 'github.com' || pathSegments.length !== 2 || url.search || url.hash) {
 		throw new Error(`${name} must be an HTTPS GitHub repository URL.`);
+	}
+	if (pathSegments[1] !== publicRepositoryName) {
+		throw new Error(`${name} must be the public odysseia-dojo GitHub repository URL.`);
 	}
 
 	return url;
