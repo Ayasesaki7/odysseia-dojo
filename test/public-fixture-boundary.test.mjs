@@ -69,6 +69,17 @@ test('public fixture boundary rejects injected production configuration without 
 	);
 });
 
+test('public fixture boundary rejects an injected public source commit SHA without echoing it', () => {
+	assert.throws(
+		() => assertNoForbiddenFixtureEnvironment({ PUBLIC_SOURCE_COMMIT_SHA: '0123456789abcdef0123456789abcdef01234567' }),
+		(error) => {
+			assert.match(error.message, /PUBLIC_SOURCE_COMMIT_SHA/u);
+			assert.doesNotMatch(error.message, /0123456789abcdef0123456789abcdef01234567/u);
+			return true;
+		},
+	);
+});
+
 test('public fixture boundary rejects ignored local configuration files without echoing values', async (t) => {
 	for (const configurationFile of ['.dev.vars', '.env.production']) {
 		const root = await makeBoundaryProject(t);

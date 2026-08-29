@@ -47,9 +47,7 @@ function requiredPublicSourceCommitSha(value) {
 	return value;
 }
 
-export function publicSourceRevisionUrl(environment = process.env) {
-	if (!environment.PUBLIC_SOURCE_REPOSITORY_URL && !environment.PUBLIC_SOURCE_COMMIT_SHA) return undefined;
-
+function requiredPublicSourceRevisionUrl(environment) {
 	const repositoryUrl = requiredGitHubRepositoryUrl(
 		environment.PUBLIC_SOURCE_REPOSITORY_URL,
 		'PUBLIC_SOURCE_REPOSITORY_URL',
@@ -57,6 +55,11 @@ export function publicSourceRevisionUrl(environment = process.env) {
 	const commitSha = requiredPublicSourceCommitSha(environment.PUBLIC_SOURCE_COMMIT_SHA);
 
 	return `${repositoryUrl.toString().replace(/\/$/u, '')}/tree/${commitSha}`;
+}
+
+export function publicSourceRevisionUrl(environment = process.env) {
+	if (!environment.PUBLIC_SOURCE_REPOSITORY_URL && !environment.PUBLIC_SOURCE_COMMIT_SHA) return undefined;
+	return requiredPublicSourceRevisionUrl(environment);
 }
 
 export function assertProductionPublicBuildConfig(environment = process.env) {
@@ -67,5 +70,5 @@ export function assertProductionPublicBuildConfig(environment = process.env) {
 		throw new Error('PUBLIC_CANONICAL_URL must be an origin URL without a path, query, or fragment.');
 	}
 
-	publicSourceRevisionUrl(environment);
+	requiredPublicSourceRevisionUrl(environment);
 }

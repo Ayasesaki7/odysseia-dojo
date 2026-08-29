@@ -48,6 +48,14 @@ test('production builds require a canonical origin, public GitHub repository URL
 			}),
 		/PUBLIC_SOURCE_COMMIT_SHA must be a full lowercase Git commit SHA/u,
 	);
+	assert.throws(
+		() =>
+			assertProductionPublicBuildConfig({
+				DEPLOYMENT_MODE: 'production',
+				PUBLIC_CANONICAL_URL: 'https://odysseia-dojo.github.io',
+			}),
+		/PUBLIC_SOURCE_REPOSITORY_URL must be set/u,
+	);
 });
 
 test('production source links pin the public repository to the configured commit', () => {
