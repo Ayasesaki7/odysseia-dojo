@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, lstat, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, lstat, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -55,9 +55,9 @@ async function waitForPage(url, expectedText) {
 	throw lastError;
 }
 
-async function runAssemblyCli(arguments_, environment = process.env) {
-	const child = spawn(process.execPath, [assemblyCli, ...arguments_], {
-		cwd: publicProjectRoot,
+async function runAssemblyCli(arguments_, environment = process.env, options = {}) {
+	const child = spawn(process.execPath, [options.cli ?? assemblyCli, ...arguments_], {
+		cwd: options.cwd ?? publicProjectRoot,
 		env: environment,
 		stdio: ['ignore', 'pipe', 'pipe'],
 	});
@@ -66,6 +66,17 @@ async function runAssemblyCli(arguments_, environment = process.env) {
 	child.stderr.on('data', (chunk) => output.push(chunk.toString()));
 	const [exitCode] = await once(child, 'close');
 	return { exitCode, output: output.join('') };
+}
+
+async function makeTrustedCliProject(t) {
+	const temporaryRoot = await mkdtemp(resolve(tmpdir(), 'odysseia-dojo-trusted-cli-'));
+	const projectRoot = resolve(temporaryRoot, 'dojo-sites/odysseia-dojo');
+	const cli = resolve(projectRoot, 'scripts/content-assembly.mjs');
+	t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+
+	await mkdir(resolve(cli, '..'), { recursive: true });
+	await copyFile(assemblyCli, cli);
+	return { projectRoot, cli };
 }
 
 async function availablePort() {
@@ -163,13 +174,29 @@ test('fixture assembly rejects linked fixture input and unknown source selectors
 });
 
 test('the public CLI rejects CI local mode and forbidden content selectors', async () => {
-	const localInCi = await runAssemblyCli(['local'], { ...process.env, CI: 'true' });
+	const localInCi = await runAssemblyCli(['local'], {
+		...process.env,
+		CI: 'true',
+		npm_lifecycle_event: 'content:local',
+	});
 	assert.notEqual(localInCi.exitCode, 0);
 	assert.match(localInCi.output, /content:local is unavailable in CI/u);
 
 	const archive = await runAssemblyCli(['archive']);
 	assert.notEqual(archive.exitCode, 0);
 	assert.match(archive.output, /Unsupported content source: archive/u);
+});
+
+test('the public CLI rejects direct local assembly outside the declared npm command', async (t) => {
+	const { projectRoot, cli } = await makeTrustedCliProject(t);
+	const directLocal = await runAssemblyCli(
+		['local'],
+		{ ...process.env, CI: '', npm_lifecycle_event: 'build' },
+		{ cli, cwd: projectRoot },
+	);
+
+	assert.notEqual(directLocal.exitCode, 0);
+	assert.match(directLocal.output, /content:local must be invoked through npm run content:local/u);
 });
 
 test('Astro/Vite serves and refreshes a linked local content directory', { timeout: 20_000 }, async (t) => {

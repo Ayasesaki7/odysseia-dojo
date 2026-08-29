@@ -23,6 +23,9 @@ const fixtureCommands = [
 ];
 const fixtureBoundaryPrefix = /^npm run content:fixtures\s*&&\s*npm run verify:fixture-boundary(?:\s*&&|\s*$)/u;
 const fixtureBuildPrefix = /^npm run content:fixtures\s*&&\s*npm run build(?:\s*&&|\s*$)/u;
+const localConfigurationFilePattern = /^\.(?:dev\.vars|env)(?:\..*)?$/u;
+const localConfigurationExamples = new Set(['.dev.vars.example', '.env.example']);
+const localContentAssemblyPattern = /\b(?:content:local|scripts\/content-assembly\.mjs\s+local)\b/u;
 const forbiddenEnvironmentNames = [
 	'ANTICHEAT_HASH_SECRET',
 	'CLOUDFLARE_ACCOUNT_ID',
@@ -75,10 +78,21 @@ export function assertNoForbiddenFixtureEnvironment(environment = process.env) {
 	}
 }
 
+async function assertNoLocalConfigurationFiles(projectRoot) {
+	const entries = await readdir(projectRoot, { withFileTypes: true });
+	if (
+		entries.some(
+			(entry) => localConfigurationFilePattern.test(entry.name) && !localConfigurationExamples.has(entry.name),
+		)
+	) {
+		throw errorFor('fixture commands must not load local configuration files');
+	}
+}
+
 export function assertFixtureCommands(manifest) {
 	for (const command of fixtureCommands) {
 		const script = manifest.scripts?.[command] ?? '';
-		if (/\bcontent:local\b/u.test(script)) {
+		if (localContentAssemblyPattern.test(script)) {
 			throw errorFor(`${command} must not materialize local content`);
 		}
 		if (!/^npm run content:fixtures(?:\s*&&|\s*$)/u.test(script)) {
@@ -157,6 +171,7 @@ export async function verifyPublicFixtureBoundary({
 	]);
 
 	assertNoForbiddenFixtureEnvironment(environment);
+	await assertNoLocalConfigurationFiles(projectRoot);
 	assertFixtureCommands(JSON.parse(packageJson));
 	assertFixtureCiWorkflow(workflow);
 	assertFixturePreviewConfig(wranglerConfig);

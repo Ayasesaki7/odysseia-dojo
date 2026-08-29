@@ -77,6 +77,21 @@ test('fixture reference validation rejects a missing protected image without ech
 	});
 });
 
+test('fixture reference validation rejects an image outside the protected tutorial-image path without echoing it', async (t) => {
+	const projectRoot = await makeFixtureReferenceProject(t);
+	await writeFile(
+		resolve(projectRoot, 'src/content/docs/tutorials/01-fixture-guide.md'),
+		'![Unprotected fixture image](/F08_UNPROTECTED_IMAGE.svg)\n',
+		'utf8',
+	);
+
+	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
+		assert.match(error.message, /fixture image must use a protected tutorial-image path/u);
+		assert.doesNotMatch(error.message, /F08_UNPROTECTED_IMAGE/u);
+		return true;
+	});
+});
+
 test('fixture reference validation rejects a missing reference-style document target without echoing it', async (t) => {
 	const projectRoot = await makeFixtureReferenceProject(t);
 	await writeFile(

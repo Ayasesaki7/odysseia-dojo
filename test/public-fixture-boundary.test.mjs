@@ -69,6 +69,23 @@ test('public fixture boundary rejects injected production configuration without 
 	);
 });
 
+test('public fixture boundary rejects ignored local configuration files without echoing values', async (t) => {
+	for (const configurationFile of ['.dev.vars', '.env.production']) {
+		const root = await makeBoundaryProject(t);
+		await Promise.all([
+			mkdir(resolve(root, 'src/content/docs'), { recursive: true }),
+			mkdir(resolve(root, 'public/protected'), { recursive: true }),
+			writeFile(resolve(root, configurationFile), 'SESSION_SECRET=F08_LOCAL_CONFIGURATION_CANARY\n', 'utf8'),
+		]);
+
+		await assert.rejects(verifyPublicFixtureBoundary({ projectRoot: root, environment: {} }), (error) => {
+			assert.match(error.message, /local configuration files/u);
+			assert.doesNotMatch(error.message, /F08_LOCAL_CONFIGURATION_CANARY/u);
+			return true;
+		});
+	}
+});
+
 test('public fixture boundary rejects workflows that request repository secrets', () => {
 	assert.throws(
 		() => assertFixtureCiWorkflow('jobs:\n  validate:\n    env:\n      TOKEN: ${{ secrets.DEPLOY_TOKEN }}\n'),
@@ -127,6 +144,14 @@ test('public fixture boundary rejects a fixture-prefixed command that materializ
 	scripts.preview = 'npm run content:fixtures && npm run build && npm run content:local && astro preview';
 
 	assert.throws(() => assertFixtureCommands({ scripts }), /preview must not materialize local content/u);
+});
+
+test('public fixture boundary rejects a fixture-prefixed command that invokes local assembly directly', () => {
+	const scripts = fixtureCommandScripts();
+	scripts.build =
+		'npm run content:fixtures && npm run verify:fixture-boundary && node scripts/content-assembly.mjs local && astro build';
+
+	assert.throws(() => assertFixtureCommands({ scripts }), /build must not materialize local content/u);
 });
 
 test('public fixture boundary rejects Git-tracked runtime content without naming it', async (t) => {

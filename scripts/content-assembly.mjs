@@ -174,6 +174,9 @@ export async function materializeContent(mode, options = {}) {
 
 function trustedPrivateContentRoot(root) {
 	const workspaceRoot = dirname(root);
+	if (process.env.npm_lifecycle_event !== 'content:local') {
+		throw new Error('content:local must be invoked through npm run content:local.');
+	}
 	if (process.env.CI) {
 		throw new Error('content:local is unavailable in CI; use content:fixtures instead.');
 	}

@@ -24,16 +24,18 @@ that filesystem policy to a workflow or another command.
 `validate` runs `verify:fixture-boundary` before the matrix, and `build` invokes
 it before generating artifacts. `preview` invokes that guarded build. The guard
 fails if a public runtime path is Git-tracked or a symlink, if a production
-configuration value is injected, if the workflow asks for a Secret, private
-content, an additional checkout, or deployment, or if Worker preview URLs are
-enabled. Its diagnostics identify only the failed control, never a configured
-value.
+configuration value is injected, if ignored local `.dev.vars*` or `.env*`
+configuration is present (other than the committed examples), if the workflow
+asks for a Secret, private content, an additional checkout, or deployment, or
+if Worker preview URLs are enabled. Its diagnostics identify only the failed
+control, never a configured value.
 
 After Astro's schema check and before the production build, `validate` runs
 `verify:fixture-references`. It resolves every fixture Markdown/MDX internal
-document link, rejects duplicate stable document URLs, and confirms referenced
-protected images and attachments are real files. Its diagnostics identify only
-the failed control, never a fixture path or body.
+document link, rejects duplicate stable document URLs, requires every fixture
+image to use a real protected tutorial-image file, and confirms referenced
+protected attachments are real files. Its diagnostics identify only the failed
+control, never a fixture path or body.
 
 The build's fixture-output verifier requires the expected fixture documents,
 protected assets, and Pagefind fragments to be files. It rejects output

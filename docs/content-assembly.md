@@ -12,6 +12,9 @@ Callers choose a mode, not paths. The module owns removal of current runtime
 input, source validation, and materialization. That keeps fixture replacement,
 the local allowlist, and Git-ignore behavior in one place instead of asking
 build, CI, and preview callers to repeat security-sensitive filesystem logic.
+The CLI accepts local mode only through the declared `npm run content:local`
+command, so a public build or Preview command cannot disguise local assembly as
+an implementation-script invocation.
 
 ## Tracked public source
 

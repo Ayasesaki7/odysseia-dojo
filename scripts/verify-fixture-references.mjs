@@ -10,6 +10,7 @@ const defaultProjectRoot = resolve(dirname(scriptPath), '..');
 const fixtureOrigin = 'https://fixture.invalid';
 const documentExtensions = new Set(['.md', '.mdx']);
 const markdownParser = unified().use(remarkParse).use(remarkMdx);
+const protectedTutorialImagePath = '/protected/tutorial-images/';
 
 function errorFor(label) {
 	return new Error(`Fixture reference validation failed: ${label}.`);
@@ -51,11 +52,12 @@ function referenceTargets(markdown) {
 		if (node.type === 'definition') definitions.set(node.identifier, node.url);
 	});
 	visit(tree, (node) => {
-		if (node.type === 'link' || node.type === 'image') targets.push(node.url);
+		if (node.type === 'link') targets.push({ kind: 'link', target: node.url });
+		if (node.type === 'image') targets.push({ kind: 'image', target: node.url });
 		if (node.type === 'linkReference' || node.type === 'imageReference') {
 			const target = definitions.get(node.identifier);
 			if (!target) throw errorFor('Markdown reference has no definition');
-			targets.push(target);
+			targets.push({ kind: node.type === 'imageReference' ? 'image' : 'link', target });
 		}
 		if (Array.isArray(node.attributes)) {
 			for (const attribute of node.attributes) {
@@ -66,7 +68,7 @@ function referenceTargets(markdown) {
 				if (typeof attribute.value !== 'string') {
 					throw errorFor('fixture MDX reference is not static');
 				}
-				targets.push(attribute.value);
+				targets.push({ kind: attribute.name === 'src' ? 'image' : 'link', target: attribute.value });
 			}
 		}
 	});
@@ -100,6 +102,12 @@ function asDocumentRoute(url) {
 	return `/${segments.join('/')}/`;
 }
 
+function assertFixtureImageUrl(url) {
+	if (!url || !url.pathname.startsWith(protectedTutorialImagePath)) {
+		throw errorFor('fixture image must use a protected tutorial-image path');
+	}
+}
+
 async function assertProtectedResourceExists(url, publicRoot) {
 	if (!url.pathname.startsWith('/protected/')) return;
 
@@ -128,8 +136,9 @@ export async function verifyFixtureReferences({ projectRoot = defaultProjectRoot
 	for (const documentPath of documentFiles) {
 		const sourceRoute = documentRoute(documentRoot, documentPath);
 		const markdown = await readFile(documentPath, 'utf8');
-		for (const target of referenceTargets(markdown)) {
-			const url = fixtureUrl(target, sourceRoute);
+		for (const reference of referenceTargets(markdown)) {
+			const url = fixtureUrl(reference.target, sourceRoute);
+			if (reference.kind === 'image') assertFixtureImageUrl(url);
 			if (!url) continue;
 
 			const targetRoute = asDocumentRoute(url);
