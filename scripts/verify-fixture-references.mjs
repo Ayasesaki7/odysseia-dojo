@@ -1,5 +1,5 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
-import { dirname, extname, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { unified } from 'unified';
 import remarkMdx from 'remark-mdx';
@@ -102,9 +102,27 @@ function asDocumentRoute(url) {
 	return `/${segments.join('/')}/`;
 }
 
-function assertFixtureImageUrl(url) {
+function isWithinRoot(root, path) {
+	const pathFromRoot = relative(root, path);
+	return (
+		pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot))
+	);
+}
+
+function assertFixtureImageUrl(url, publicRoot) {
 	if (!url || !url.pathname.startsWith(protectedTutorialImagePath)) {
 		throw errorFor('fixture image must use a protected tutorial-image path');
+	}
+
+	let imagePath;
+	try {
+		imagePath = resolve(publicRoot, decodeURIComponent(url.pathname).slice(1));
+	} catch {
+		throw errorFor('fixture image path is not valid');
+	}
+	const imageRoot = resolve(publicRoot, protectedTutorialImagePath.slice(1));
+	if (!isWithinRoot(imageRoot, imagePath)) {
+		throw errorFor('fixture image must resolve within protected tutorial-image path');
 	}
 }
 
@@ -138,7 +156,7 @@ export async function verifyFixtureReferences({ projectRoot = defaultProjectRoot
 		const markdown = await readFile(documentPath, 'utf8');
 		for (const reference of referenceTargets(markdown)) {
 			const url = fixtureUrl(reference.target, sourceRoute);
-			if (reference.kind === 'image') assertFixtureImageUrl(url);
+			if (reference.kind === 'image') assertFixtureImageUrl(url, publicRoot);
 			if (!url) continue;
 
 			const targetRoute = asDocumentRoute(url);

@@ -92,6 +92,24 @@ test('fixture reference validation rejects an image outside the protected tutori
 	});
 });
 
+test('fixture reference validation rejects an encoded separator that escapes the protected tutorial-image root', async (t) => {
+	const projectRoot = await makeFixtureReferenceProject(t);
+	await Promise.all([
+		writeFile(resolve(projectRoot, 'public/F08_PUBLIC_ONLY_TARGET.txt'), 'public-only test file\n', 'utf8'),
+		writeFile(
+			resolve(projectRoot, 'src/content/docs/tutorials/01-fixture-guide.md'),
+			'![Escaped fixture image](/protected/tutorial-images/%2e%2e%2f%2e%2e%2fF08_PUBLIC_ONLY_TARGET.txt)\n',
+			'utf8',
+		),
+	]);
+
+	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
+		assert.match(error.message, /fixture image must resolve within protected tutorial-image path/u);
+		assert.doesNotMatch(error.message, /F08_PUBLIC_ONLY_TARGET/u);
+		return true;
+	});
+});
+
 test('fixture reference validation rejects a missing reference-style document target without echoing it', async (t) => {
 	const projectRoot = await makeFixtureReferenceProject(t);
 	await writeFile(
