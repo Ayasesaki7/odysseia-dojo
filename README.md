@@ -66,10 +66,13 @@ npm run validate
 ```
 
 Every public validation and Preview command always reassembles fixtures. The
-production build validation checks stable fixture URLs, protected fixture assets,
-and generated Pagefind fragments, while rejecting unexpected protected documents,
-archive, question-bank, unprotected JSON, sitemap, RSS, Atom, feed, and
-private-content-marker output.
+maintained validation matrix resolves fixture document links, checks stable URL
+collisions and protected-resource references, and checks expected generated
+output file types and Pagefind fragments. The output verifier scans both client
+assets and deployable server artifacts while rejecting unexpected protected
+documents, archive, question-bank, unprotected JSON, sitemap, RSS, Atom, feed,
+and private-content-marker output. `build` runs the fixture-boundary guard, and
+`preview` invokes that guarded build before serving.
 `test:worker` starts the generated Worker with its real Static Assets and
 isolated D1 bindings, then exercises the deployed boundary with fixtures. See
 [`docs/worker-test-seam.md`](docs/worker-test-seam.md) for the fresh-checkout

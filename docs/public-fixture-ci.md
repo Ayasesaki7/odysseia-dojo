@@ -15,24 +15,32 @@ public lockfile with `npm ci`, and runs:
 npm run validate
 ```
 
-`validate` and every public format, lint, test, check, build, Worker-test, and
-Preview command first run `content:fixtures`. The
+`validate` and every public format, lint, test, check, build, Worker-test,
+reference-validation, and Preview command first run `content:fixtures`. The
 [content assembly contract](content-assembly.md) owns the replacement behavior:
 it removes runtime inputs before copying the tracked fixture roots. Do not add
 that filesystem policy to a workflow or another command.
 
-`validate` also runs `verify:fixture-boundary`. Its guard fails if a public
-runtime path is Git-tracked or a symlink, if a production configuration value is
-injected, if the workflow asks for a Secret, private content, an additional
-checkout, or deployment, or if Worker preview URLs are enabled. Its diagnostics
-identify only the failed control, never a configured value.
+`validate` runs `verify:fixture-boundary` before the matrix, and `build` invokes
+it before generating artifacts. `preview` invokes that guarded build. The guard
+fails if a public runtime path is Git-tracked or a symlink, if a production
+configuration value is injected, if the workflow asks for a Secret, private
+content, an additional checkout, or deployment, or if Worker preview URLs are
+enabled. Its diagnostics identify only the failed control, never a configured
+value.
+
+After Astro's schema check and before the production build, `validate` runs
+`verify:fixture-references`. It resolves every fixture Markdown/MDX internal
+document link, rejects duplicate stable document URLs, and confirms referenced
+protected images and attachments are real files. Its diagnostics identify only
+the failed control, never a fixture path or body.
 
 The build's fixture-output verifier requires the expected fixture documents,
-protected assets, and Pagefind fragments. It rejects output symlinks,
-unexpected protected documents, unprotected JSON, archive, question-bank,
-sitemap, RSS, Atom, and feed output, and scans generated files for
-private-content and credential markers. It reports marker categories rather
-than content or paths.
+protected assets, and Pagefind fragments to be files. It rejects output
+symlinks, unexpected protected documents, unprotected JSON, archive,
+question-bank, sitemap, RSS, Atom, and feed output, and scans both client and
+deployable server files for private-content and credential markers. It reports
+marker categories rather than content or paths.
 
 The existing [Worker test seam](worker-test-seam.md) remains the behavioral
 boundary. It exercises OAuth state and return targets, Sessions, membership

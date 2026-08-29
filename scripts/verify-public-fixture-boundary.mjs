@@ -3,6 +3,7 @@ import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'jsonc-parser';
 
 const executeFile = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
@@ -16,9 +17,12 @@ const fixtureCommands = [
 	'build',
 	'test:worker',
 	'verify:fixture-boundary',
+	'verify:fixture-references',
 	'validate',
 	'preview',
 ];
+const fixtureBoundaryPrefix = /^npm run content:fixtures\s*&&\s*npm run verify:fixture-boundary(?:\s*&&|\s*$)/u;
+const fixtureBuildPrefix = /^npm run content:fixtures\s*&&\s*npm run build(?:\s*&&|\s*$)/u;
 const forbiddenEnvironmentNames = [
 	'ANTICHEAT_HASH_SECRET',
 	'CLOUDFLARE_ACCOUNT_ID',
@@ -73,9 +77,19 @@ export function assertNoForbiddenFixtureEnvironment(environment = process.env) {
 
 export function assertFixtureCommands(manifest) {
 	for (const command of fixtureCommands) {
-		if (!/^npm run content:fixtures(?:\s*&&|\s*$)/u.test(manifest.scripts?.[command] ?? '')) {
+		const script = manifest.scripts?.[command] ?? '';
+		if (/\bcontent:local\b/u.test(script)) {
+			throw errorFor(`${command} must not materialize local content`);
+		}
+		if (!/^npm run content:fixtures(?:\s*&&|\s*$)/u.test(script)) {
 			throw errorFor(`${command} must directly reassemble fixtures`);
 		}
+	}
+	if (!fixtureBoundaryPrefix.test(manifest.scripts?.build ?? '')) {
+		throw errorFor('build must run the fixture boundary guard before building');
+	}
+	if (!fixtureBuildPrefix.test(manifest.scripts?.preview ?? '')) {
+		throw errorFor('preview must run the boundary-guarded build before serving');
 	}
 }
 
@@ -89,10 +103,15 @@ export function assertFixtureCiWorkflow(workflow) {
 }
 
 function assertFixturePreviewConfig(wranglerConfig) {
-	if (!/"preview_urls"\s*:\s*false/u.test(wranglerConfig)) {
+	const errors = [];
+	const config = parse(wranglerConfig, errors, { allowTrailingComma: true, disallowComments: false });
+	if (errors.length > 0 || !config || typeof config !== 'object' || Array.isArray(config)) {
+		throw errorFor('fixture configuration is not valid JSONC');
+	}
+	if (config.preview_urls !== false) {
 		throw errorFor('fixture configuration permits Worker preview URLs');
 	}
-	if (!/"workers_dev"\s*:\s*false/u.test(wranglerConfig)) {
+	if (config.workers_dev !== false) {
 		throw errorFor('fixture configuration permits workers.dev deployment');
 	}
 }

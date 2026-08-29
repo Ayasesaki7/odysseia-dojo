@@ -1,10 +1,11 @@
-import { access, readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = resolve(dirname(scriptPath), '..');
 const defaultOutputRoot = resolve(projectRoot, 'dist/client');
+const defaultServerOutputRoot = resolve(projectRoot, 'dist/server');
 
 const expectedFixtureOutputPaths = [
 	'docs/tutorials/index.html',
@@ -48,12 +49,15 @@ async function walk(root, outputRoot) {
 	return paths;
 }
 
-async function assertExists(outputRoot, path) {
+async function assertExpectedFile(outputRoot, path) {
+	let entry;
 	try {
-		await access(resolve(outputRoot, path));
+		entry = await lstat(resolve(outputRoot, path));
 	} catch {
 		throw new Error(`Expected fixture build output is missing: ${path}`);
 	}
+	if (entry.isSymbolicLink()) throw new Error('Fixture build output contains a symlink.');
+	if (!entry.isFile()) throw new Error('Expected fixture build output is not a file.');
 }
 
 function assertNoForbiddenOutputPaths(generatedPaths) {
@@ -65,7 +69,9 @@ function assertNoForbiddenOutputPaths(generatedPaths) {
 	if (forbiddenOutput.length > 0) {
 		throw new Error('Fixture build output contains forbidden derived paths.');
 	}
+}
 
+function assertNoForbiddenClientOutputPaths(generatedPaths) {
 	const unprotectedJsonOutput = generatedPaths.filter(
 		(path) => path.endsWith('.json') && !path.startsWith('pagefind/'),
 	);
@@ -99,12 +105,17 @@ async function assertNoForbiddenOutputContent(outputRoot, generatedPaths) {
 	}
 }
 
-export async function verifyFixtureOutput({ outputRoot = defaultOutputRoot, report = true } = {}) {
+export async function verifyFixtureOutput({
+	outputRoot = defaultOutputRoot,
+	serverOutputRoot = defaultServerOutputRoot,
+	report = true,
+} = {}) {
 	for (const expectedPath of expectedFixtureOutputPaths) {
-		await assertExists(outputRoot, expectedPath);
+		await assertExpectedFile(outputRoot, expectedPath);
 	}
 
 	const generatedPaths = await walk(outputRoot, outputRoot);
+	const generatedServerPaths = await walk(serverOutputRoot, serverOutputRoot);
 	const outputInventory = {
 		protectedDocumentHtml: generatedPaths.filter(
 			(path) => /^docs\/(?:tutorials|extensions)(?:\/|$)/u.test(path) && path.endsWith('.html'),
@@ -119,13 +130,17 @@ export async function verifyFixtureOutput({ outputRoot = defaultOutputRoot, repo
 	}
 
 	assertNoForbiddenOutputPaths(generatedPaths);
+	assertNoForbiddenOutputPaths(generatedServerPaths);
+	assertNoForbiddenClientOutputPaths(generatedPaths);
 	await assertNoForbiddenOutputContent(outputRoot, generatedPaths);
+	await assertNoForbiddenOutputContent(serverOutputRoot, generatedServerPaths);
 
 	if (report) {
 		console.log(
 			`Fixture build inventory: ${outputInventory.protectedDocumentHtml} protected document HTML files, ` +
 				`${outputInventory.pagefindAssets} Pagefind assets, ${outputInventory.protectedTutorialImages} protected tutorial images, and ` +
-				`${outputInventory.protectedAttachments} protected attachments; no unprotected JSON, feed, archive, question-bank, or private-content markers.`,
+				`${outputInventory.protectedAttachments} protected attachments; ${generatedServerPaths.length} deployable server artifacts scanned; ` +
+				'no unprotected JSON, feed, archive, question-bank, or private-content markers.',
 		);
 	}
 

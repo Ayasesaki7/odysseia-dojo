@@ -18,6 +18,26 @@ const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '..');
 const runFile = promisify(execFile);
 
+function fixtureCommandScripts() {
+	const scripts = Object.fromEntries(
+		[
+			'format',
+			'lint',
+			'test',
+			'check',
+			'build',
+			'test:worker',
+			'verify:fixture-boundary',
+			'verify:fixture-references',
+			'validate',
+			'preview',
+		].map((command) => [command, 'npm run content:fixtures && true']),
+	);
+	scripts.build = 'npm run content:fixtures && npm run verify:fixture-boundary && astro build';
+	scripts.preview = 'npm run content:fixtures && npm run build && astro preview';
+	return scripts;
+}
+
 async function makeBoundaryProject(t) {
 	const root = await mkdtemp(resolve(tmpdir(), 'odysseia-dojo-public-boundary-'));
 	t.after(() => rm(root, { recursive: true, force: true }));
@@ -63,15 +83,50 @@ test('public fixture boundary rejects workflows that can operate on D1', () => {
 	);
 });
 
-test('public fixture boundary rejects a command that assembles fixtures after work', () => {
-	const scripts = Object.fromEntries(
-		['format', 'lint', 'test', 'check', 'build', 'test:worker', 'verify:fixture-boundary', 'validate', 'preview'].map(
-			(command) => [command, 'npm run content:fixtures && true'],
+test('public fixture boundary rejects enabled Preview URLs despite a false comment', async (t) => {
+	const root = await makeBoundaryProject(t);
+	await Promise.all([
+		writeFile(
+			resolve(root, 'wrangler.jsonc'),
+			'{\n  // "preview_urls": false\n  "preview_urls": true,\n  "workers_dev": false\n}\n',
+			'utf8',
 		),
+		mkdir(resolve(root, 'src/content/docs'), { recursive: true }),
+		mkdir(resolve(root, 'public/protected'), { recursive: true }),
+	]);
+
+	await assert.rejects(
+		verifyPublicFixtureBoundary({ projectRoot: root, environment: {} }),
+		/fixture configuration permits Worker preview URLs/u,
 	);
+});
+
+test('public fixture boundary rejects a command that assembles fixtures after work', () => {
+	const scripts = fixtureCommandScripts();
 	scripts.build = 'astro build && npm run content:fixtures';
 
 	assert.throws(() => assertFixtureCommands({ scripts }), /build must directly reassemble fixtures/u);
+});
+
+test('public fixture boundary rejects a build path that skips environment verification', () => {
+	const scripts = fixtureCommandScripts();
+	scripts.build = 'npm run content:fixtures && astro build';
+
+	assert.throws(() => assertFixtureCommands({ scripts }), /build must run the fixture boundary guard/u);
+});
+
+test('public fixture boundary rejects a Preview path that skips the boundary-guarded build', () => {
+	const scripts = fixtureCommandScripts();
+	scripts.preview = 'npm run content:fixtures && astro preview';
+
+	assert.throws(() => assertFixtureCommands({ scripts }), /preview must run the boundary-guarded build/u);
+});
+
+test('public fixture boundary rejects a fixture-prefixed command that materializes local content', () => {
+	const scripts = fixtureCommandScripts();
+	scripts.preview = 'npm run content:fixtures && npm run build && npm run content:local && astro preview';
+
+	assert.throws(() => assertFixtureCommands({ scripts }), /preview must not materialize local content/u);
 });
 
 test('public fixture boundary rejects Git-tracked runtime content without naming it', async (t) => {

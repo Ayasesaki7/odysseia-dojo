@@ -21,6 +21,7 @@ test('public commands and GitHub Actions CI always use fixture-only validation',
 		'build',
 		'test:worker',
 		'verify:fixture-boundary',
+		'verify:fixture-references',
 		'validate',
 		'preview',
 	]) {
@@ -31,12 +32,26 @@ test('public commands and GitHub Actions CI always use fixture-only validation',
 		);
 	}
 	let previousStep = -1;
-	for (const command of ['verify:fixture-boundary', 'format', 'lint', 'test', 'check', 'build', 'test:worker']) {
+	for (const command of [
+		'verify:fixture-boundary',
+		'format',
+		'lint',
+		'test',
+		'check',
+		'verify:fixture-references',
+		'build',
+		'test:worker',
+	]) {
 		const step = packageJson.scripts.validate.indexOf(`npm run ${command}`);
 		assert.ok(step > previousStep, `validate must run ${command} in the public validation sequence.`);
 		previousStep = step;
 	}
-	for (const testFile of ['public-fixture-ci', 'public-fixture-boundary', 'fixture-output-isolation']) {
+	for (const testFile of [
+		'public-fixture-ci',
+		'public-fixture-boundary',
+		'fixture-output-isolation',
+		'fixture-reference-validation',
+	]) {
 		assert.match(packageJson.scripts.test, new RegExp(`test/${testFile}\\.test\\.mjs`, 'u'));
 	}
 
