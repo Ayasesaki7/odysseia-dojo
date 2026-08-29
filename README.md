@@ -55,21 +55,30 @@ operational checks.
 ## Public validation
 
 ```sh
+npm run format
+npm run lint
 npm run test
 npm run check
 npm run build
 npm run test:worker
+npm run verify:fixture-boundary
 npm run validate
 ```
 
-`check` and `build` always reassemble fixtures. The production build validation
-checks stable fixture URLs, protected fixture assets, and generated Pagefind
-fragments, while rejecting archive, question-bank, unprotected JSON, sitemap,
-RSS, Atom, and feed outputs.
+Every public validation and Preview command always reassembles fixtures. The
+production build validation checks stable fixture URLs, protected fixture assets,
+and generated Pagefind fragments, while rejecting unexpected protected documents,
+archive, question-bank, unprotected JSON, sitemap, RSS, Atom, feed, and
+private-content-marker output.
 `test:worker` starts the generated Worker with its real Static Assets and
 isolated D1 bindings, then exercises the deployed boundary with fixtures. See
 [`docs/worker-test-seam.md`](docs/worker-test-seam.md) for the fresh-checkout
 command and the test-only Discord outbound boundary.
+
+[`docs/public-fixture-ci.md`](docs/public-fixture-ci.md) owns the GitHub Actions
+workflow, public Preview isolation, and the Win10-host/VM-LAN manual browser
+checklist. It also distinguishes local fixture evidence from private or hosted
+validation that this repository cannot provide.
 
 ### Production public links
 

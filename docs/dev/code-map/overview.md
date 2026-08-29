@@ -12,10 +12,10 @@ by the linked documents.
 | Public input | [`fixtures/`](../../../fixtures/) | Tracked, non-sensitive content and protected-resource fixtures for public development and validation. |
 | Content materialization | [`scripts/content-assembly.mjs`](../../../scripts/content-assembly.mjs) | The two public content-input modes and their fixed runtime destinations. The [content assembly contract](../../content-assembly.md) owns the operational rules. |
 | Build configuration | [`package.json`](../../../package.json), [`astro.config.mjs`](../../../astro.config.mjs), and [`wrangler.jsonc`](../../../wrangler.jsonc) | Command wiring, Astro/Starlight configuration, Cloudflare Worker/static-asset configuration, and D1 migration discovery. |
-| Build checks | [`scripts/validate-public-build-config.mjs`](../../../scripts/validate-public-build-config.mjs) and [`scripts/verify-fixture-output.mjs`](../../../scripts/verify-fixture-output.mjs) | Production public-link validation and fixture-build artifact inventory. |
+| Build checks | [`scripts/validate-public-build-config.mjs`](../../../scripts/validate-public-build-config.mjs), [`scripts/verify-fixture-output.mjs`](../../../scripts/verify-fixture-output.mjs), and [`scripts/verify-public-fixture-boundary.mjs`](../../../scripts/verify-public-fixture-boundary.mjs) | Production public-link validation, fixture-build artifact isolation, and public CI/Preview boundary checks. |
 | D1 schema | [`migrations/`](../../../migrations/) | Checked-in D1 migrations used by the Worker configuration and local harness. |
 | V1 D1 retention and investigation | [`src/lib/data-retention.ts`](../../../src/lib/data-retention.ts), [`scripts/investigation-queries/`](../../../scripts/investigation-queries/), and the [data-retention runbook](../../data-retention-and-investigation.md) | Daily Worker cleanup, fixed query/deletion templates, and account-admin procedure. |
-| Public validation | [`test/`](../../../test/) | Content-assembly, public-build configuration, browser-observation logic, and production-shaped Worker checks using fixtures. |
+| Public validation | [`test/`](../../../test/) | Content assembly, public-build configuration, CI/Preview isolation, browser-observation logic, and production-shaped Worker checks using fixtures. |
 | Maintainer documentation | [`docs/`](../..) | Developer navigation and operational runbooks linked from the [developer navigator](../README.md). |
 
 ## Content flow
@@ -48,9 +48,10 @@ its browser and persistence owners are mapped in [browser observation](observati
 [`package.json`](../../../package.json) exposes the maintained npm entrypoints.
 They assemble the public fixture input where required, run Astro's configured
 Cloudflare build, and use the checked-in scripts to validate public build
-configuration and generated fixture artifacts. The production-shaped Worker
-test consumes the generated Worker configuration. The [tooling map](tooling.md)
-owns the command-to-entrypoint route and prerequisites.
+configuration, generated fixture artifacts, and public CI/Preview isolation.
+The production-shaped Worker test consumes the generated Worker configuration.
+The [tooling map](tooling.md) owns the command-to-entrypoint route and
+prerequisites.
 
 ## Current source boundary
 

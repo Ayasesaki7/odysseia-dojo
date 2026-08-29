@@ -23,7 +23,7 @@ function parseIpv4(value) {
 }
 
 function parseIpv6(value) {
-	if (!value.includes(':') || /[\[\]%]/u.test(value)) return undefined;
+	if (!value.includes(':') || /(?:\[|\]|%)/u.test(value)) return undefined;
 
 	let hostname;
 	try {
