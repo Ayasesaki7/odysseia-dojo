@@ -1,4 +1,5 @@
 const placeholderHosts = new Set(['example.com', 'example.org', 'example.net', 'localhost']);
+const fullCommitSha = /^[a-f0-9]{40}$/u;
 
 function isPlaceholderHost(hostname) {
 	return (
@@ -38,6 +39,26 @@ function requiredGitHubRepositoryUrl(value, name) {
 	return url;
 }
 
+function requiredPublicSourceCommitSha(value) {
+	if (!fullCommitSha.test(value ?? '')) {
+		throw new Error('PUBLIC_SOURCE_COMMIT_SHA must be a full lowercase Git commit SHA.');
+	}
+
+	return value;
+}
+
+export function publicSourceRevisionUrl(environment = process.env) {
+	if (!environment.PUBLIC_SOURCE_REPOSITORY_URL && !environment.PUBLIC_SOURCE_COMMIT_SHA) return undefined;
+
+	const repositoryUrl = requiredGitHubRepositoryUrl(
+		environment.PUBLIC_SOURCE_REPOSITORY_URL,
+		'PUBLIC_SOURCE_REPOSITORY_URL',
+	);
+	const commitSha = requiredPublicSourceCommitSha(environment.PUBLIC_SOURCE_COMMIT_SHA);
+
+	return `${repositoryUrl.toString().replace(/\/$/u, '')}/tree/${commitSha}`;
+}
+
 export function assertProductionPublicBuildConfig(environment = process.env) {
 	if (environment.DEPLOYMENT_MODE !== 'production') return;
 
@@ -46,5 +67,5 @@ export function assertProductionPublicBuildConfig(environment = process.env) {
 		throw new Error('PUBLIC_CANONICAL_URL must be an origin URL without a path, query, or fragment.');
 	}
 
-	requiredGitHubRepositoryUrl(environment.PUBLIC_SOURCE_REPOSITORY_URL, 'PUBLIC_SOURCE_REPOSITORY_URL');
+	publicSourceRevisionUrl(environment);
 }

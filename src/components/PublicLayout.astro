@@ -1,5 +1,6 @@
 ---
 import '../styles/public.css';
+import { publicSourceRevisionUrl } from '../lib/public-build-config.mjs';
 
 interface Props {
 	title: string;
@@ -8,7 +9,7 @@ interface Props {
 
 const { title, description } = Astro.props;
 const canonicalOrigin = import.meta.env.PUBLIC_CANONICAL_URL;
-const sourceRepositoryUrl = import.meta.env.PUBLIC_SOURCE_REPOSITORY_URL;
+const sourceRevisionUrl = publicSourceRevisionUrl(import.meta.env);
 
 let canonicalUrl: string | undefined;
 if (canonicalOrigin) {
@@ -40,8 +41,8 @@ if (canonicalOrigin) {
 		<slot />
 		<footer class="public-footer">
 			<p>Made by KKTsN with 💖</p>
-			{sourceRepositoryUrl && (
-				<a class="footer-github-link" href={sourceRepositoryUrl}>GitHub</a>
+			{sourceRevisionUrl && (
+				<a class="footer-github-link" href={sourceRevisionUrl}>GitHub</a>
 			)}
 		</footer>
 	</body>
