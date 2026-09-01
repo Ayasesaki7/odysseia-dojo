@@ -33,19 +33,31 @@ async function makeFixtureReferenceProject(t) {
 	return projectRoot;
 }
 
-test('fixture reference validation rejects a missing internal document target without echoing it', async (t) => {
-	const projectRoot = await makeFixtureReferenceProject(t);
-	await writeFile(
-		resolve(projectRoot, 'src/content/docs/tutorials/00-index.md'),
-		'[Missing fixture guide](/docs/tutorials/F08_MISSING_DOCUMENT_TARGET/)\n',
-		'utf8',
-	);
+test('fixture reference validation rejects missing internal document targets without echoing them', async (t) => {
+	for (const { name, markdown, canary } of [
+		{
+			name: 'inline Markdown syntax',
+			markdown: '[Missing fixture guide](/docs/tutorials/F08_MISSING_DOCUMENT_TARGET/)\n',
+			canary: 'F08_MISSING_DOCUMENT_TARGET',
+		},
+		{
+			name: 'reference-style Markdown syntax',
+			markdown:
+				'[Missing fixture guide][missing-guide]\n\n[missing-guide]: /docs/tutorials/F08_REFERENCE_DOCUMENT_TARGET/\n',
+			canary: 'F08_REFERENCE_DOCUMENT_TARGET',
+		},
+	]) {
+		await t.test(name, async (t) => {
+			const projectRoot = await makeFixtureReferenceProject(t);
+			await writeFile(resolve(projectRoot, 'src/content/docs/tutorials/00-index.md'), markdown, 'utf8');
 
-	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
-		assert.match(error.message, /internal document link targets no known fixture document/u);
-		assert.doesNotMatch(error.message, /F08_MISSING_DOCUMENT_TARGET/u);
-		return true;
-	});
+			await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
+				assert.match(error.message, /internal document link targets no known fixture document/u);
+				assert.doesNotMatch(error.message, new RegExp(canary, 'u'));
+				return true;
+			});
+		});
+	}
 });
 
 test('fixture reference validation rejects duplicate stable document URLs without echoing them', async (t) => {
@@ -62,19 +74,30 @@ test('fixture reference validation rejects duplicate stable document URLs withou
 	});
 });
 
-test('fixture reference validation rejects a missing protected image without echoing it', async (t) => {
-	const projectRoot = await makeFixtureReferenceProject(t);
-	await writeFile(
-		resolve(projectRoot, 'src/content/docs/tutorials/01-fixture-guide.md'),
-		'![Missing fixture image](/protected/tutorial-images/F08_MISSING_IMAGE.svg)\n',
-		'utf8',
-	);
+test('fixture reference validation rejects missing protected resources without echoing them', async (t) => {
+	for (const { name, markdown, canary } of [
+		{
+			name: 'Markdown image syntax',
+			markdown: '![Missing fixture image](/protected/tutorial-images/F08_MISSING_IMAGE.svg)\n',
+			canary: 'F08_MISSING_IMAGE',
+		},
+		{
+			name: 'static MDX resource syntax',
+			markdown: '<img src="/protected/tutorial-images/F08_MISSING_MDX_IMAGE.svg" alt="Missing fixture image" />\n',
+			canary: 'F08_MISSING_MDX_IMAGE',
+		},
+	]) {
+		await t.test(name, async (t) => {
+			const projectRoot = await makeFixtureReferenceProject(t);
+			await writeFile(resolve(projectRoot, 'src/content/docs/tutorials/01-fixture-guide.md'), markdown, 'utf8');
 
-	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
-		assert.match(error.message, /protected resource reference is missing/u);
-		assert.doesNotMatch(error.message, /F08_MISSING_IMAGE/u);
-		return true;
-	});
+			await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
+				assert.match(error.message, /protected resource reference is missing/u);
+				assert.doesNotMatch(error.message, new RegExp(canary, 'u'));
+				return true;
+			});
+		});
+	}
 });
 
 test('fixture reference validation rejects an image outside the protected tutorial-image path without echoing it', async (t) => {
@@ -110,21 +133,6 @@ test('fixture reference validation rejects an encoded separator that escapes the
 	});
 });
 
-test('fixture reference validation rejects a missing reference-style document target without echoing it', async (t) => {
-	const projectRoot = await makeFixtureReferenceProject(t);
-	await writeFile(
-		resolve(projectRoot, 'src/content/docs/tutorials/00-index.md'),
-		'[Missing fixture guide][missing-guide]\n\n[missing-guide]: /docs/tutorials/F08_REFERENCE_DOCUMENT_TARGET/\n',
-		'utf8',
-	);
-
-	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
-		assert.match(error.message, /internal document link targets no known fixture document/u);
-		assert.doesNotMatch(error.message, /F08_REFERENCE_DOCUMENT_TARGET/u);
-		return true;
-	});
-});
-
 test('fixture reference validation resolves source-relative Markdown document links', async (t) => {
 	const projectRoot = await makeFixtureReferenceProject(t);
 	await writeFile(
@@ -134,21 +142,6 @@ test('fixture reference validation resolves source-relative Markdown document li
 	);
 
 	await assert.doesNotReject(verifyFixtureReferences({ projectRoot, report: false }));
-});
-
-test('fixture reference validation rejects a missing static MDX resource reference without echoing it', async (t) => {
-	const projectRoot = await makeFixtureReferenceProject(t);
-	await writeFile(
-		resolve(projectRoot, 'src/content/docs/tutorials/01-fixture-guide.md'),
-		'<img src="/protected/tutorial-images/F08_MISSING_MDX_IMAGE.svg" alt="Missing fixture image" />\n',
-		'utf8',
-	);
-
-	await assert.rejects(verifyFixtureReferences({ projectRoot, report: false }), (error) => {
-		assert.match(error.message, /protected resource reference is missing/u);
-		assert.doesNotMatch(error.message, /F08_MISSING_MDX_IMAGE/u);
-		return true;
-	});
 });
 
 test('fixture reference validation rejects dynamic MDX reference attributes it cannot inspect', async (t) => {

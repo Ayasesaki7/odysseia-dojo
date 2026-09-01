@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '..');
 const queryDirectory = resolve(projectRoot, 'scripts/investigation-queries');
+const fixedQueryRowLimit = 100;
 const migrations = await Promise.all(
 	['0001_create_auth_activity.sql', '0002_create_fingerprint_observations.sql'].map((file) =>
 		readFile(resolve(projectRoot, 'migrations', file), 'utf8')
@@ -63,6 +64,36 @@ function createActivityDatabase() {
 	insertAuthActivity.run('fixture-beta', 'fixture-beta-name', '2026-01-02T12:00:00.000Z');
 
 	return db;
+}
+
+function seedActivityBeyondFixedQueryRowLimit(db) {
+	const insertObservation = db.prepare(
+		`INSERT INTO fingerprint_observations (
+			id, discord_user_id, session_id_hash, browser_fingerprint_hash,
+			ip_hash, ip_prefix_hash, captured_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	);
+
+	for (let index = 0; index <= fixedQueryRowLimit; index += 1) {
+		insertObservation.run(
+			`row-cap-correlation-${index}`,
+			`fixture-correlation-user-${index}`,
+			`fixture-correlation-session-${index}`,
+			'fixture-fingerprint-shared',
+			'fixture-ip-shared',
+			'fixture-ip-prefix-shared',
+			'2026-01-02T06:00:00.000Z'
+		);
+		insertObservation.run(
+			`row-cap-user-history-${index}`,
+			'fixture-alpha',
+			`fixture-user-history-session-${index}`,
+			`fixture-user-history-fingerprint-${index}`,
+			`fixture-user-history-ip-${index}`,
+			`fixture-user-history-ip-prefix-${index}`,
+			'2026-01-02T18:00:00.000Z'
+		);
+	}
 }
 
 function renderRawTemplate(template, parameters) {
@@ -140,6 +171,21 @@ test('fixed investigation queries use stored hashes and bounded activity results
 			['fingerprint_observation', 'fixture-beta'],
 		]
 	);
+
+	seedActivityBeyondFixedQueryRowLimit(db);
+	for (const [file, rows] of [
+		['same-fingerprint.sql', db.prepare(sameFingerprint).all('fixture-fingerprint-shared')],
+		['same-ip.sql', db.prepare(sameIp).all('fixture-ip-shared')],
+		['same-ip-prefix.sql', db.prepare(sameIpPrefix).all('fixture-ip-prefix-shared')],
+		['multiple-fingerprints.sql', db.prepare(multipleFingerprints).all('fixture-alpha')],
+		['find-user.sql', db.prepare(findUser).all('fixture-alpha')],
+		[
+			'activity-time-range.sql',
+			db.prepare(activityTimeRange).all('2026-01-02T00:00:00.000Z', '2026-01-03T00:00:00.000Z'),
+		],
+	]) {
+		assert.equal(rows.length, fixedQueryRowLimit, `${file} must cap more than 100 qualifying rows at 100`);
+	}
 });
 
 test('fixed deletion templates avoid explicit transaction control and remove only the requested or oldest V1 activity', async (t) => {

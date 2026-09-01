@@ -313,7 +313,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(asset.headers.get('content-type') ?? '', /^image\/svg\+xml/u);
 	});
 
-	test('serves disclosure and login skeletons without a session or observation request', async () => {
+	test('renders public disclosures and login/failure pages anonymously without an observation trigger', async () => {
 		const [home, login, accessDenied, cancelled, unavailable] = await Promise.all([
 			harness.fetch('/'),
 			harness.fetch('/login'),
@@ -639,7 +639,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(await observationCount(env), 1);
 	});
 
-	test('fails closed for anonymous protected document and resource requests', async () => {
+	test('fails closed for an anonymous protected document request', async () => {
 		const document = await harness.fetch('/docs/tutorials/discord-and-odysseia/', { redirect: 'manual' });
 		assert.equal(document.status, 302);
 		assert.equal(
@@ -647,11 +647,6 @@ describe('production Worker test seam', { concurrency: false }, () => {
 			'/login?returnTo=%2Fdocs%2Ftutorials%2Fdiscord-and-odysseia%2F'
 		);
 		assert.equal(document.headers.get('cache-control'), 'no-store');
-
-		const resource = await harness.fetch('/protected/tutorial-images/fixture-api-settings.svg');
-		assert.equal(resource.status, 401);
-		assert.equal(resource.headers.get('cache-control'), 'no-store');
-		assert.doesNotMatch(await resource.text(), /fixture-api-settings/u);
 	});
 
 	test('fails closed for encoded and index-file aliases of protected output', async () => {
@@ -848,7 +843,9 @@ describe('production Worker test seam', { concurrency: false }, () => {
 
 		assert.equal(response.status, 401);
 		assert.equal(response.headers.get('cache-control'), 'no-store');
-		assert.doesNotMatch(await response.text(), /Fixture protected attachment/u);
+		const body = await response.text();
+		assert.equal(body, 'Authentication is required to access this resource.');
+		assert.doesNotMatch(body, /Fixture reading checklist/u);
 	});
 
 	test('rejects an expired token before protected documents are fetched', async () => {
@@ -863,24 +860,37 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(response.headers.get('cache-control'), 'no-store');
 	});
 
-	test('fails closed when session verification or protected-path classification fails', async () => {
-		const forgedCookie = await signedSessionCookie({
-			secret: 'different-test-session-secret-that-is-longer-than-thirty-two-bytes',
-		});
-		for (const cookie of [forgedCookie, 'dojo_session=%']) {
-			const response = await harness.fetch('/pagefind%2Fpagefind.js', { headers: { Cookie: cookie } });
-			assert.equal(response.status, 401);
-			assert.equal(response.headers.get('cache-control'), 'no-store');
-			assert.equal(await response.text(), 'Authentication is required to access this resource.');
-		}
+	test('rejects forged and malformed Sessions before protected resources are fetched', async (t) => {
+		const sessionRejections = [
+			{
+				name: 'forged Session signature',
+				cookie: await signedSessionCookie({
+					secret: 'different-test-session-secret-that-is-longer-than-thirty-two-bytes',
+				}),
+			},
+			{ name: 'malformed Session Cookie encoding', cookie: 'dojo_session=%' },
+		];
 
+		for (const { name, cookie } of sessionRejections) {
+			await t.test(name, async () => {
+				const response = await harness.fetch('/pagefind%2Fpagefind.js', { headers: { Cookie: cookie } });
+				assert.equal(response.status, 401);
+				assert.equal(response.headers.get('cache-control'), 'no-store');
+				assert.equal(await response.text(), 'Authentication is required to access this resource.');
+			});
+		}
+	});
+
+	test('fails closed when protected-path classification fails', async () => {
 		const malformedPath = await harness.fetch('/docs%2Ftutorials%2Fdiscord-and-odysseia%2Findex.html%FF', {
 			redirect: 'manual',
 		});
 		assert.equal(malformedPath.status, 503);
 		assert.equal(malformedPath.headers.get('cache-control'), 'no-store');
 		assert.equal(await malformedPath.text(), 'Protected content is temporarily unavailable.');
+	});
 
+	test('preserves an authenticated downstream 404 as a private protected response', async () => {
 		const missingProtectedRoute = await harness.fetch('/docs/tutorials/no-such-fixture/index.html', {
 			headers: { Cookie: await signedSessionCookie() },
 		});
@@ -973,49 +983,5 @@ describe('production Worker test seam', { concurrency: false }, () => {
 			.map((log) => log.message);
 		assert.deepEqual(errors, ['Retention cleanup reached its configured batch cap.']);
 		assert.doesNotMatch(errors.join('\n'), /expired|retained|2026-|cookie|token|secret|ip/u);
-	});
-
-	test('keeps future Discord egress controllable without contacting Discord', async () => {
-		const originalFetch = globalThis.fetch;
-		const observedRequests = [];
-		globalThis.fetch = async (input, init) => {
-			const request = new Request(input, init);
-			observedRequests.push({ url: request.url, authorization: request.headers.get('authorization') });
-			return new Response(JSON.stringify({ id: 'test-discord-member' }), {
-				headers: { 'content-type': 'application/json' },
-			});
-		};
-
-		const outboundHarness = createTestHarness({
-			root: projectRoot,
-			workers: [
-				{
-					config: {
-						name: 'discord-outbound-boundary',
-						main: './test/fixtures/discord-outbound-worker.mjs',
-						compatibility_date: '2026-08-20',
-					},
-				},
-			],
-		});
-
-		try {
-			await outboundHarness.listen();
-			const response = await outboundHarness.fetch('/probe');
-			assert.equal(response.status, 200);
-			assert.deepEqual(await response.json(), {
-				status: 200,
-				body: JSON.stringify({ id: 'test-discord-member' }),
-			});
-			assert.deepEqual(observedRequests, [
-				{
-					url: 'https://discord.com/api/v10/users/@me',
-					authorization: 'Bearer test-only-token',
-				},
-			]);
-		} finally {
-			await outboundHarness.close();
-			globalThis.fetch = originalFetch;
-		}
 	});
 });

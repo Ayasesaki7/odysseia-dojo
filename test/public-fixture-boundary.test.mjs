@@ -58,26 +58,30 @@ test('public fixture boundary accepts the checked-in public tree', async () => {
 	await verifyPublicFixtureBoundary({ projectRoot });
 });
 
-test('public fixture boundary rejects injected production configuration without echoing values', () => {
-	assert.throws(
-		() => assertNoForbiddenFixtureEnvironment({ SESSION_SECRET: 'F08_PRODUCTION_SECRET_CANARY' }),
-		(error) => {
-			assert.match(error.message, /SESSION_SECRET/u);
-			assert.doesNotMatch(error.message, /F08_PRODUCTION_SECRET_CANARY/u);
-			return true;
+test('public fixture boundary rejects injected production configuration without echoing values', async (t) => {
+	for (const { name, environmentName, value } of [
+		{
+			name: 'secret',
+			environmentName: 'SESSION_SECRET',
+			value: 'F08_PRODUCTION_SECRET_CANARY',
 		},
-	);
-});
-
-test('public fixture boundary rejects an injected public source commit SHA without echoing it', () => {
-	assert.throws(
-		() => assertNoForbiddenFixtureEnvironment({ PUBLIC_SOURCE_COMMIT_SHA: '0123456789abcdef0123456789abcdef01234567' }),
-		(error) => {
-			assert.match(error.message, /PUBLIC_SOURCE_COMMIT_SHA/u);
-			assert.doesNotMatch(error.message, /0123456789abcdef0123456789abcdef01234567/u);
-			return true;
+		{
+			name: 'public revision',
+			environmentName: 'PUBLIC_SOURCE_COMMIT_SHA',
+			value: '0123456789abcdef0123456789abcdef01234567',
 		},
-	);
+	]) {
+		await t.test(name, () => {
+			assert.throws(
+				() => assertNoForbiddenFixtureEnvironment({ [environmentName]: value }),
+				(error) => {
+					assert.match(error.message, new RegExp(environmentName, 'u'));
+					assert.doesNotMatch(error.message, new RegExp(value, 'u'));
+					return true;
+				},
+			);
+		});
+	}
 });
 
 test('public fixture boundary rejects ignored local configuration files without echoing values', async (t) => {
