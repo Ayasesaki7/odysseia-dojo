@@ -142,7 +142,7 @@ test('fixed investigation queries use stored hashes and bounded activity results
 	);
 });
 
-test('fixed deletion templates remove only the requested or oldest V1 activity', async (t) => {
+test('fixed deletion templates avoid explicit transaction control and remove only the requested or oldest V1 activity', async (t) => {
 	const userDeletionDb = createActivityDatabase();
 	const oldestDeletionDb = createActivityDatabase();
 	t.after(() => {
@@ -154,6 +154,16 @@ test('fixed deletion templates remove only the requested or oldest V1 activity',
 		fixedQuery('delete-user-activity.sql'),
 		fixedQuery('delete-oldest-activity.sql'),
 	]);
+	for (const [file, template] of [
+		['delete-user-activity.sql', deleteUserActivity],
+		['delete-oldest-activity.sql', deleteOldestActivity],
+	]) {
+		assert.doesNotMatch(
+			template,
+			/^\s*(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/imu,
+			`${file} must remain compatible with the Wrangler remote file-execution path`
+		);
+	}
 
 	userDeletionDb.exec(renderRawTemplate(deleteUserActivity, ['fixture-alpha']));
 	assert.deepEqual(

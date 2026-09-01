@@ -52,6 +52,12 @@ unchanged and bind values when the approved D1 client offers parameter binding.
 using the Dashboard D1 Console or Wrangler raw-file path, make a temporary,
 local rendered copy of the selected template and replace **only** its documented
 parameter markers. Do not add predicates, table names, joins, or statements.
+The two manual deletion templates intentionally contain their two fixed `DELETE`
+statements without an explicit transaction wrapper because remote Wrangler file
+execution rejects transaction-control statements. Run the complete rendered file
+once through the remote Wrangler file procedure below: D1 imports that complete
+file atomically. Do not split it or add `BEGIN`, `COMMIT`, or other
+transaction-control statements.
 Never commit, upload, or retain that rendered copy.
 
 Before rendering a raw-file copy, validate the input for its documented slot:
@@ -85,11 +91,13 @@ contents.
 2. After confirmation, copy that account's Discord User ID and handle it as a
    string. Use the fixed `find-user.sql` template first; it reads both V1 tables
    and may supply stored HMACs for the correlation templates.
-3. If the requester asks for early deletion, run only
+3. If the requester asks for early deletion, use the remote Wrangler file
+   procedure above to run only
    [`delete-user-activity.sql`](../scripts/investigation-queries/delete-user-activity.sql)
    with that same verified string ID. It deletes associated rows from both V1
-   business tables in one transaction. Do not delete or create future-version
-   audit tables.
+   business tables through its two fixed `DELETE` statements in the one
+   remote-file import transaction. Do not delete or create future-version audit
+   tables.
 4. Run the fixed `find-user.sql` template again to verify that it returns no
    activity for the verified ID. Do not record the result contents outside the
    D1 session.
