@@ -370,6 +370,13 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(homeBody, /<summary>查看完整隐私说明<\/summary>/u);
 		assert.match(homeBody, /<summary>查看教程署名、许可与内容边界<\/summary>/u);
 		assert.match(homeBody, /HMAC-SHA256/u);
+		assert.match(homeBody, /在开始答题时，茉莉会向网站发送 Discord 用户 ID。/u);
+		assert.match(homeBody, /网站仅使用该 ID 对既有防代打观测作出当前答题资格决定/u);
+		assert.match(homeBody, /最小的当前决定，若缺少当前观测则返回稳定的缺失原因。/u);
+		assert.match(homeBody, /不会为资格查询另存查询时间、结果或审计记录。/u);
+		assert.match(homeBody, /浏览器信息、IP、Hash、观测时间和调查数据均不会返回给茉莉/u);
+		assert.match(homeBody, /不改变既有活动业务记录的保留、经验证查询、提前删除或每日有界清理/u);
+		assert.match(homeBody, /不改变 D1 Time Travel 的灾难恢复说明。/u);
 		assert.match(homeBody, /超过 90 天后进入每日定时清理范围/u);
 		assert.match(homeBody, /下一次成功清理/u);
 		assert.match(homeBody, /最多可能额外保留 7 天/u);
