@@ -15,6 +15,21 @@ const TEST_DISCORD_REDIRECT_URI = 'https://dojo.test/api/auth/callback';
 const TEST_DISCORD_GUILD_ID = '1134557553011998840';
 const TEST_DISCORD_ACCESS_TOKEN = 'test-discord-access-token';
 const TEST_ANTICHEAT_HASH_SECRET = '0123456789abcdef0123456789abcdef';
+const TEST_QUIZ_ELIGIBILITY_API_KEY = 'Zml4dHVyZS1vbmx5LXF1aXotZWxpZ2liaWxpdHktc2VjcmV0';
+const TEST_QUIZ_DISCORD_USER_ID = '123456789012345678';
+
+const TEST_BASE_WORKER_SECRETS = {
+	SESSION_SECRET: TEST_SESSION_SECRET,
+	DISCORD_CLIENT_ID: TEST_DISCORD_CLIENT_ID,
+	DISCORD_CLIENT_SECRET: TEST_DISCORD_CLIENT_SECRET,
+	DISCORD_REDIRECT_URI: TEST_DISCORD_REDIRECT_URI,
+	DISCORD_GUILD_ID: TEST_DISCORD_GUILD_ID,
+	ANTICHEAT_HASH_SECRET: TEST_ANTICHEAT_HASH_SECRET,
+};
+const TEST_WORKER_SECRETS = {
+	...TEST_BASE_WORKER_SECRETS,
+	QUIZ_ELIGIBILITY_API_KEY: TEST_QUIZ_ELIGIBILITY_API_KEY,
+};
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '..');
@@ -23,14 +38,7 @@ const harness = createTestHarness({
 	workers: [
 			{
 				configPath: './dist/server/wrangler.json',
-				secrets: {
-					SESSION_SECRET: TEST_SESSION_SECRET,
-					DISCORD_CLIENT_ID: TEST_DISCORD_CLIENT_ID,
-					DISCORD_CLIENT_SECRET: TEST_DISCORD_CLIENT_SECRET,
-					DISCORD_REDIRECT_URI: TEST_DISCORD_REDIRECT_URI,
-					DISCORD_GUILD_ID: TEST_DISCORD_GUILD_ID,
-					ANTICHEAT_HASH_SECRET: TEST_ANTICHEAT_HASH_SECRET,
-				},
+				secrets: TEST_WORKER_SECRETS,
 			},
 	],
 });
@@ -152,6 +160,31 @@ async function submitFingerprint(payload = fingerprintPayload(), options = {}) {
 async function observationCount(env) {
 	const result = await env.DB.prepare('SELECT COUNT(*) AS count FROM fingerprint_observations').first();
 	return result?.count;
+}
+
+async function seedEligibilityObservation(env, discordUserId, capturedAt, suffix) {
+	await env.DB
+		.prepare(
+			'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?1, ?2, ?3, ?4, ?5)'
+		)
+		.bind(`eligibility-${suffix}`, discordUserId, `eligibility-session-${suffix}`, `eligibility-ip-${suffix}`, capturedAt)
+		.run();
+}
+
+async function requestQuizEligibility({
+	method = 'POST',
+	authorization = `Bearer ${TEST_QUIZ_ELIGIBILITY_API_KEY}`,
+	contentType = 'application/json',
+	body = JSON.stringify({ discordUserId: TEST_QUIZ_DISCORD_USER_ID }),
+} = {}) {
+	const headers = new Headers();
+	if (authorization !== null) headers.set('authorization', authorization);
+	if (contentType !== null) headers.set('content-type', contentType);
+	return harness.fetch('/api/internal/quiz-eligibility', {
+		method,
+		headers,
+		body: method === 'GET' || method === 'HEAD' ? undefined : body,
+	});
 }
 
 async function activityCount(env, table) {
@@ -637,6 +670,152 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(retry.status, 204);
 		assert.equal(retry.headers.get('cache-control'), 'no-store');
 		assert.equal(await observationCount(env), 1);
+	});
+
+	test('returns the minimal missing-observation eligibility decision', async () => {
+		const env = await applyD1Migrations();
+		const response = await requestQuizEligibility({ contentType: 'application/json; charset=utf-8' });
+
+		assert.equal(response.status, 200);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.match(response.headers.get('content-type') ?? '', /^application\/json/u);
+		assert.equal(await response.text(), '{"eligible":false,"reason":"fingerprint_missing"}');
+		assert.equal(await observationCount(env), 0);
+	});
+
+	test('rejects missing and incorrect Bearer credentials before D1 access', async () => {
+		for (const [index, authorization] of [
+			null,
+			TEST_QUIZ_ELIGIBILITY_API_KEY,
+			'Basic fixture-credential',
+			`Bearer ${TEST_QUIZ_ELIGIBILITY_API_KEY.slice(0, -1)}A`,
+			`Bearer ${TEST_QUIZ_ELIGIBILITY_API_KEY.slice(0, -1)}`,
+			`Bearer ${TEST_QUIZ_ELIGIBILITY_API_KEY}A`,
+		].entries()) {
+			const response = await requestQuizEligibility({ authorization });
+			assert.equal(response.status, 401, `credential vector ${index}`);
+			assert.equal(response.headers.get('cache-control'), 'no-store');
+			assert.equal(await response.text(), '{"error":"request_rejected"}');
+			// Isolate vectors because Wrangler's local listener can drop a reused connection after consecutive 401 responses.
+			await harness.reset();
+		}
+	});
+
+	test('fails closed when the eligibility API key configuration is missing or malformed', async () => {
+		for (const configuredKey of [undefined, 'short-fixture-key']) {
+			const isolatedHarness = createTestHarness({
+				root: projectRoot,
+				workers: [
+					{
+						configPath: './dist/server/wrangler.json',
+						secrets:
+							configuredKey === undefined
+								? TEST_BASE_WORKER_SECRETS
+								: { ...TEST_BASE_WORKER_SECRETS, QUIZ_ELIGIBILITY_API_KEY: configuredKey },
+					},
+				],
+			});
+			await isolatedHarness.listen();
+			try {
+				const response = await isolatedHarness.fetch('/api/internal/quiz-eligibility', {
+					method: 'POST',
+					headers: {
+						authorization: `Bearer ${TEST_QUIZ_ELIGIBILITY_API_KEY}`,
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify({ discordUserId: TEST_QUIZ_DISCORD_USER_ID }),
+				});
+				assert.equal(response.status, 503);
+				assert.equal(response.headers.get('cache-control'), 'no-store');
+				assert.equal(await response.text(), '{"error":"request_rejected"}');
+			} finally {
+				await isolatedHarness.close();
+			}
+		}
+	});
+
+	test('rejects unsupported methods, media types, and malformed bodies before D1 access', async (t) => {
+		const cases = [
+			{ name: 'unsupported method', request: { method: 'GET' }, status: 405 },
+			{ name: 'missing content type', request: { contentType: null }, status: 415 },
+			{ name: 'wrong content type', request: { contentType: 'text/plain' }, status: 415 },
+			{ name: 'malformed JSON', request: { body: '{' }, status: 400 },
+			{ name: 'array body', request: { body: '[]' }, status: 400 },
+			{ name: 'missing field', request: { body: '{}' }, status: 400 },
+			{
+				name: 'unknown field',
+				request: { body: JSON.stringify({ discordUserId: TEST_QUIZ_DISCORD_USER_ID, extra: true }) },
+				status: 400,
+			},
+			{ name: 'numeric ID', request: { body: '{"discordUserId":123456789012345678}' }, status: 400 },
+			{ name: 'short ID', request: { body: '{"discordUserId":"1234567890123456"}' }, status: 400 },
+			{ name: 'long ID', request: { body: '{"discordUserId":"123456789012345678901"}' }, status: 400 },
+			{
+				name: 'non-ASCII digits',
+				request: { body: '{"discordUserId":"１２３４５６７８９０１２３４５６７"}' },
+				status: 400,
+			},
+		];
+
+		for (const fixture of cases) {
+			await t.test(fixture.name, async () => {
+				const response = await requestQuizEligibility(fixture.request);
+				assert.equal(response.status, fixture.status);
+				assert.equal(response.headers.get('cache-control'), 'no-store');
+				assert.equal(await response.text(), '{"error":"request_rejected"}');
+			});
+		}
+	});
+
+	test('uses the server eight-day window and excludes future observations', async () => {
+		const env = await applyD1Migrations();
+		const now = Date.now();
+		const day = 24 * 60 * 60 * 1_000;
+		const expiredUserId = '223456789012345678';
+		const futureUserId = '323456789012345678';
+		const mixedUserId = '423456789012345678';
+
+		await seedEligibilityObservation(
+			env,
+			TEST_QUIZ_DISCORD_USER_ID,
+			new Date(now - 8 * day + 60_000).toISOString(),
+			'current'
+		);
+		await seedEligibilityObservation(env, expiredUserId, new Date(now - 8 * day - 60_000).toISOString(), 'expired');
+		await seedEligibilityObservation(env, futureUserId, new Date(now + 60_000).toISOString(), 'future');
+		await seedEligibilityObservation(env, mixedUserId, new Date(now - 2 * day).toISOString(), 'mixed-current');
+		await seedEligibilityObservation(env, mixedUserId, new Date(now - day).toISOString(), 'mixed-latest-current');
+		await seedEligibilityObservation(env, mixedUserId, new Date(now + day).toISOString(), 'mixed-future');
+
+		const eligible = await requestQuizEligibility();
+		const expired = await requestQuizEligibility({ body: JSON.stringify({ discordUserId: expiredUserId }) });
+		const future = await requestQuizEligibility({ body: JSON.stringify({ discordUserId: futureUserId }) });
+		const mixed = await requestQuizEligibility({ body: JSON.stringify({ discordUserId: mixedUserId }) });
+
+		for (const response of [eligible, expired, future, mixed]) {
+			assert.equal(response.status, 200);
+			assert.equal(response.headers.get('cache-control'), 'no-store');
+		}
+		assert.equal(await eligible.text(), '{"eligible":true}');
+		assert.equal(await expired.text(), '{"eligible":false,"reason":"fingerprint_missing"}');
+		assert.equal(await future.text(), '{"eligible":false,"reason":"fingerprint_missing"}');
+		assert.equal(await mixed.text(), '{"eligible":true}');
+		assert.equal(await observationCount(env), 6);
+	});
+
+	test('returns a generic non-cacheable service failure when D1 is unavailable', async () => {
+		const env = await applyD1Migrations();
+		await env.DB.prepare('DROP TABLE fingerprint_observations').run();
+		harness.clearLogs();
+
+		const response = await requestQuizEligibility();
+		assert.equal(response.status, 503);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.equal(await response.text(), '{"error":"request_rejected"}');
+
+		const output = JSON.stringify(harness.getLogs());
+		assert.doesNotMatch(output, new RegExp(TEST_QUIZ_ELIGIBILITY_API_KEY, 'u'));
+		assert.doesNotMatch(output, new RegExp(TEST_QUIZ_DISCORD_USER_ID, 'u'));
 	});
 
 	test('fails closed for an anonymous protected document request', async () => {

@@ -25,8 +25,11 @@ authenticated-then-anonymous reuse attempt. The OAuth start/callback/logout,
 return-target, distinct failure-state, and D1 OAuth-activity checks remain at
 the same boundary. Authenticated observation requests cover server-derived
 context, no-store responses, per-Session D1 idempotence, and retry after a
-failed write. The same isolated D1 binding seeds exact-boundary and skewed
-retention records, then invokes the deployed `scheduled()` entrypoint to prove
+failed write. Quiz-eligibility requests cover dedicated-key authentication,
+strict request validation, the inclusive eight-day decision window, minimal
+no-store responses, read-only behavior, and D1 failure. The same isolated D1
+binding seeds exact-boundary and skewed retention records, then invokes the
+deployed `scheduled()` entrypoint to prove
 the five-round bounded expiry cleanup and its redacted cap-reached signal
 without a browser-facing trigger. Authenticated reading checks
 also exercise the native Starlight navigation and page features. The Pagefind
@@ -37,11 +40,12 @@ configured secrets.
 
 The OAuth routes and their D1 activity write are Astro `src/pages/api/**`
 endpoints, while `src/middleware.ts` applies the shared Session policy to
-Astro-rendered routes. The custom Worker remains intentionally narrow: with
-`assets.run_worker_first`, it invokes that same policy before delegating
-protected static-asset requests to the Astro Cloudflare handler. This is
-necessary because the adapter returns matching `ASSETS` before Astro middleware
-runs.
+Astro-rendered routes. The custom Worker handles the exact internal
+quiz-eligibility path before Astro so every method and content-type rejection
+uses the endpoint's fail-closed response contract. For other requests, with
+`assets.run_worker_first`, it invokes the shared protected-content policy before
+delegating to the Astro Cloudflare handler. This is necessary because the
+adapter returns matching `ASSETS` before Astro middleware runs.
 
 ## Discord boundary
 

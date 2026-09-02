@@ -33,8 +33,11 @@ behavior, and local-mode constraints are maintained in the
 
 ## Request flow
 
-The deployed request path starts at [`src/worker.ts`](../../../src/worker.ts),
-which applies the shared policy before delegating to Astro's Cloudflare handler.
+The deployed request path starts at [`src/worker.ts`](../../../src/worker.ts).
+It dispatches the authenticated quiz-eligibility API to
+[`src/lib/quiz-eligibility.ts`](../../../src/lib/quiz-eligibility.ts), then
+applies the shared protected-content policy before delegating other requests to
+Astro's Cloudflare handler.
 [`src/middleware.ts`](../../../src/middleware.ts) applies that same policy to
 Astro-rendered routes. OAuth endpoint and Session ownership live below
 [`src/pages/api/auth/`](../../../src/pages/api/auth/); the detailed owner and
