@@ -734,11 +734,18 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		}
 	});
 
-	test('rejects unsupported methods, media types, and malformed bodies before D1 access', async (t) => {
+	test('rejects unsupported methods, media types, and invalid or oversized bodies before D1 access', async (t) => {
 		const cases = [
 			{ name: 'unsupported method', request: { method: 'GET' }, status: 405 },
 			{ name: 'missing content type', request: { contentType: null }, status: 415 },
 			{ name: 'wrong content type', request: { contentType: 'text/plain' }, status: 415 },
+			{
+				name: 'oversized body',
+				request: {
+					body: JSON.stringify({ discordUserId: TEST_QUIZ_DISCORD_USER_ID, padding: 'x'.repeat(1_024) }),
+				},
+				status: 413,
+			},
 			{ name: 'malformed JSON', request: { body: '{' }, status: 400 },
 			{ name: 'array body', request: { body: '[]' }, status: 400 },
 			{ name: 'missing field', request: { body: '{}' }, status: 400 },

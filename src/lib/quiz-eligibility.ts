@@ -3,6 +3,7 @@ interface QuizEligibilityRequest {
 }
 
 const ELIGIBILITY_WINDOW_MILLISECONDS = 8 * 24 * 60 * 60 * 1_000;
+const MAX_QUIZ_ELIGIBILITY_BODY_BYTES = 1_024;
 
 type QuizEligibilityEnvironment = Pick<DojoEnvironment, 'DB'> &
 	Partial<Pick<DojoEnvironment, 'QUIZ_ELIGIBILITY_API_KEY'>>;
@@ -10,6 +11,8 @@ type QuizEligibilityEnvironment = Pick<DojoEnvironment, 'DB'> &
 interface TimingSafeSubtleCrypto extends SubtleCrypto {
 	timingSafeEqual(left: BufferSource, right: BufferSource): boolean;
 }
+
+type QuizEligibilityRequestParseResult = { payload: QuizEligibilityRequest } | { failureStatus: 400 | 413 };
 
 function errorResponse(status: number): Response {
 	return Response.json({ error: 'request_rejected' }, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -50,20 +53,61 @@ export function quizEligibilityWindow(now: number): { earliest: string; latest: 
 	};
 }
 
-async function parseQuizEligibilityRequest(request: Request): Promise<QuizEligibilityRequest | undefined> {
-	let value: unknown;
-	try {
-		value = await request.json();
-	} catch {
-		return undefined;
+async function parseQuizEligibilityRequest(request: Request): Promise<QuizEligibilityRequestParseResult> {
+	const contentLength = request.headers.get('content-length');
+	if (contentLength !== null && Number(contentLength) > MAX_QUIZ_ELIGIBILITY_BODY_BYTES) {
+		return { failureStatus: 413 };
 	}
 
-	if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-	const payload = value as Record<string, unknown>;
-	if (Object.keys(payload).length !== 1 || !Object.hasOwn(payload, 'discordUserId')) return undefined;
-	if (typeof payload.discordUserId !== 'string' || !/^[0-9]{17,20}$/u.test(payload.discordUserId)) return undefined;
+	const body = request.body;
+	if (!body) return { failureStatus: 400 };
 
-	return { discordUserId: payload.discordUserId };
+	const chunks: Uint8Array[] = [];
+	let byteLength = 0;
+	const reader = body.getReader();
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (value.byteLength > MAX_QUIZ_ELIGIBILITY_BODY_BYTES - byteLength) {
+				try {
+					await reader.cancel();
+				} catch {
+					// The response remains a stable 413 even if stream cancellation fails.
+				}
+				return { failureStatus: 413 };
+			}
+			chunks.push(value);
+			byteLength += value.byteLength;
+		}
+	} catch {
+		return { failureStatus: 400 };
+	} finally {
+		reader.releaseLock();
+	}
+
+	const bytes = new Uint8Array(byteLength);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	let value: unknown;
+	try {
+		value = JSON.parse(new TextDecoder().decode(bytes));
+	} catch {
+		return { failureStatus: 400 };
+	}
+
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) return { failureStatus: 400 };
+	const payload = value as Record<string, unknown>;
+	if (Object.keys(payload).length !== 1 || !Object.hasOwn(payload, 'discordUserId')) return { failureStatus: 400 };
+	if (typeof payload.discordUserId !== 'string' || !/^[0-9]{17,20}$/u.test(payload.discordUserId)) {
+		return { failureStatus: 400 };
+	}
+
+	return { payload: { discordUserId: payload.discordUserId } };
 }
 
 function eligibilityResponse(eligible: boolean): Response {
@@ -86,8 +130,9 @@ export async function checkQuizEligibility(request: Request, env: QuizEligibilit
 
 	const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
 	if (contentType !== 'application/json') return errorResponse(415);
-	const payload = await parseQuizEligibilityRequest(request);
-	if (!payload) return errorResponse(400);
+	const parsedRequest = await parseQuizEligibilityRequest(request);
+	if ('failureStatus' in parsedRequest) return errorResponse(parsedRequest.failureStatus);
+	const { payload } = parsedRequest;
 	const window = quizEligibilityWindow(Date.now());
 	let observation: { captured_at: string } | null;
 	try {
