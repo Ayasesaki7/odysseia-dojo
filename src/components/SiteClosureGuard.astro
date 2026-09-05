@@ -1,0 +1,7 @@
+<script>
+	import { startSiteClosureGuard } from '../lib/site-closure-client';
+	startSiteClosureGuard();
+</script>
+<style is:global>
+	html[data-dojo-closed='true'] body { visibility: hidden; }
+</style>

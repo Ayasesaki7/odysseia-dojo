@@ -21,6 +21,7 @@ export default defineConfig({
 				},
 			},
 			components: {
+				Head: './src/components/ReadingHead.astro',
 				PageTitle: './src/components/ProtectedPageTitle.astro',
 			},
 			sidebar: [
