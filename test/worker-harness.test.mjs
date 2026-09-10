@@ -376,7 +376,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(homeBody, /Discord 用户 ID、当时的用户名快照/u);
 		assert.match(homeBody, /不保存 Discord 授权令牌。/u);
 		assert.match(homeBody, /HMAC-SHA256/u);
-		assert.match(homeBody, /数据库里没有明文 IP。/u);
+		assert.match(homeBody, /数据库里没有明文 IP，也没有明文 User-Agent。/u);
 		assert.match(homeBody, /不会只凭单一信号自动给你评分、处罚或封禁/u);
 		assert.match(homeBody, /茉莉只会把你的 Discord 用户 ID 发给网站/u);
 		assert.match(homeBody, /最近 8 天内有没有你的反作弊记录，只回答你现在能不能答题。/u);
