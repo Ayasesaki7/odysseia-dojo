@@ -140,11 +140,11 @@ test('coalesces duplicate automatic attempts and stays silent for the rest of th
 
 	await controller.start();
 	assert.equal(posts, 1, 'The stored login marker may suppress only an automatic duplicate attempt.');
-	assert.deepEqual(states, ['available']);
+	assert.deepEqual(states, ['already-recorded']);
 
 	await controller.retry();
 	assert.equal(posts, 2, 'A retry must still reach the server despite a local marker.');
-	assert.deepEqual(states, ['available', 'recorded']);
+	assert.deepEqual(states, ['already-recorded', 'recorded']);
 });
 
 test('records once more for a new login and whenever the page carries no login marker', async () => {
@@ -174,5 +174,5 @@ test('records once more for a new login and whenever the page carries no login m
 
 	await controllerFor('1789691200').start();
 	assert.equal(posts, 3, 'A marker-less attempt must not overwrite the marker of the current login.');
-	assert.deepEqual(states, ['recorded', 'recorded', 'recorded', 'available']);
+	assert.deepEqual(states, ['recorded', 'recorded', 'recorded', 'already-recorded']);
 });

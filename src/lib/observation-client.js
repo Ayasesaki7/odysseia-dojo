@@ -83,7 +83,7 @@ export function createObservationController({ collect, post, storage, sessionMar
 
 	async function run(force) {
 		if (!force && hasRecordedSession(storage, sessionMarker)) {
-			notify(onState, 'available');
+			notify(onState, 'already-recorded');
 			return;
 		}
 

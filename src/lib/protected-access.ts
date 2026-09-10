@@ -54,7 +54,7 @@ function rejectedProtectedRequest(request: Request, kind: ProtectedRequestKind):
 	});
 }
 
-async function verifiedProtectedRequest(
+async function authenticateProtectedRequest(
 	request: Request,
 	sessionSecret: string,
 	kind: ProtectedRequestKind | undefined
@@ -113,7 +113,7 @@ export async function applyProtectedAccessPolicy(
 		return unavailableProtectedRequest();
 	}
 
-	const { rejection, claims } = await verifiedProtectedRequest(request, sessionSecret, kind);
+	const { rejection, claims } = await authenticateProtectedRequest(request, sessionSecret, kind);
 	if (rejection) return rejection;
 
 	try {

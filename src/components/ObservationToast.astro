@@ -1,0 +1,84 @@
+<!-- The Worker adds data-observation-session to this element for the verified login. -->
+<div class="dojo-observation-toast" data-observation-toast role="status" hidden>
+	<p data-observation-message></p>
+	<div class="dojo-observation-actions" data-observation-actions hidden>
+		<button data-observation-retry type="button">重试</button>
+		<button data-observation-dismiss type="button">关闭</button>
+	</div>
+</div>
+
+<script>
+	import { startBrowserObservation } from '../lib/browser-observation';
+
+	startBrowserObservation();
+</script>
+
+<style>
+	@layer starlight.core {
+		.dojo-observation-toast {
+			position: fixed;
+			inset-block-end: 1.25rem;
+			inset-inline-end: 1.25rem;
+			z-index: var(--sl-z-index-skiplink);
+			max-width: min(22rem, calc(100vw - 2.5rem));
+			border-inline-start: 0.25rem solid var(--sl-color-gray-3);
+			border-radius: 0.5rem;
+			padding: 0.75rem 1rem;
+			background: var(--sl-color-gray-6);
+			color: var(--sl-color-text);
+			font-size: var(--sl-text-sm);
+			box-shadow: var(--sl-shadow-md);
+			animation: dojo-observation-toast-in 0.2s ease-out;
+		}
+
+		.dojo-observation-toast[data-observation-tone='success'] {
+			border-color: var(--sl-color-green);
+			background: var(--sl-color-green-low);
+			color: var(--sl-color-green-high);
+		}
+
+		.dojo-observation-toast p {
+			margin: 0;
+		}
+
+		.dojo-observation-actions {
+			display: flex;
+			gap: 0.5rem;
+			margin-top: 0.625rem;
+		}
+
+		.dojo-observation-actions button {
+			border: 1px solid currentColor;
+			border-radius: 0.25rem;
+			padding: 0.2rem 0.7rem;
+			background: transparent;
+			color: inherit;
+			font: inherit;
+			cursor: pointer;
+		}
+
+		.dojo-observation-actions button:hover {
+			background: var(--sl-color-gray-5);
+		}
+
+		@keyframes dojo-observation-toast-in {
+			from {
+				opacity: 0;
+				transform: translateY(0.5rem);
+			}
+		}
+
+		@media (max-width: 30rem) {
+			.dojo-observation-toast {
+				inset-inline: 1.25rem;
+				max-width: none;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.dojo-observation-toast {
+				animation: none;
+			}
+		}
+	}
+</style>

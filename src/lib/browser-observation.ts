@@ -94,7 +94,6 @@ export function startBrowserObservation(documentRoot: Document = document) {
 		storage: browserStorage(),
 		sessionMarker: toast?.dataset.observationSession,
 		onState: (state: string) => {
-			// A login that already recorded its observation stays silent.
 			if (state === 'recorded') showToast('success', '反作弊数据已记录');
 			else if (state === 'retry') showToast('notice', '反作弊数据未记录');
 		},

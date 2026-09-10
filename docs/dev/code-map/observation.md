@@ -18,9 +18,9 @@ seam](../../worker-test-seam.md) owns the operational harness procedure.
 | Observation schema | [`migrations/0002_create_fingerprint_observations.sql`](../../../migrations/0002_create_fingerprint_observations.sql) | D1 migration discovery through [`wrangler.jsonc`](../../../wrangler.jsonc) |
 
 `ProtectedPageTitle.astro` is configured by Starlight for protected document
-pages. It renders the observation toast container and calls
-`startBrowserObservation()` after the page loads. It does not gate rendering,
-access, or navigation.
+pages. It renders [`ObservationToast.astro`](../../../src/components/ObservationToast.astro),
+which owns the toast container and calls `startBrowserObservation()` after the
+page loads. Neither component gates rendering, access, or navigation.
 
 Protected documents are prerendered, so the current login marker cannot come
 from the page build. `applyProtectedAccessPolicy()` in
