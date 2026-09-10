@@ -364,6 +364,10 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(accessDenied.headers.get('set-cookie'), null);
 
 		const homeBody = await home.text();
+		assert.match(homeBody, /<title>类脑 Odysseia - 道馆挑战<\/title>/u);
+		assert.match(homeBody, /<h1 id="site-title">类脑 Odysseia - 道馆教程区<\/h1>/u);
+		assert.match(homeBody, /面向类脑 Odysseia 社区成员的教程站，用 Discord 登录后即可阅读。/u);
+		assert.doesNotMatch(homeBody, /类脑 ODYSSEIA 社区/u);
 		assert.doesNotMatch(homeBody, /教程与答题范围/u);
 		assert.doesNotMatch(homeBody, /现行答题规则/u);
 		assert.doesNotMatch(homeBody, /href="\/#rules"/u);
