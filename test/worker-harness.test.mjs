@@ -392,6 +392,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.doesNotMatch(homeBody, /Time Travel/u);
 		assert.doesNotMatch(homeBody, /location hint/u);
 		assert.doesNotMatch(homeBody, /最多删除 100 条/u);
+		assert.doesNotMatch(homeBody, /aria-label="公开导航"/u);
+		assert.doesNotMatch(homeBody, /footer-github-link/u);
 		assert.match(homeBody, /AGPL-3\.0-or-later/u);
 		assert.match(homeBody, /CC BY-NC 4\.0/u);
 		assert.match(homeBody, /Made by KKTsN with 💖/u);
