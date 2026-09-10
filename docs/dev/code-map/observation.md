@@ -18,8 +18,15 @@ seam](../../worker-test-seam.md) owns the operational harness procedure.
 | Observation schema | [`migrations/0002_create_fingerprint_observations.sql`](../../../migrations/0002_create_fingerprint_observations.sql) | D1 migration discovery through [`wrangler.jsonc`](../../../wrangler.jsonc) |
 
 `ProtectedPageTitle.astro` is configured by Starlight for protected document
-pages and calls `startBrowserObservation()` after the page loads. It does not
-gate rendering, access, or navigation.
+pages. It renders the observation toast container and calls
+`startBrowserObservation()` after the page loads. It does not gate rendering,
+access, or navigation.
+
+Protected documents are prerendered, so the current login marker cannot come
+from the page build. `applyProtectedAccessPolicy()` in
+[`src/lib/protected-access.ts`](../../../src/lib/protected-access.ts) adds
+`data-observation-session`, the verified Session `iat`, to the toast container
+of every protected HTML document response.
 
 ## Trust and persistence boundary
 
@@ -37,11 +44,13 @@ observation data. Its D1 insert is parameterized and uses the session-hash
 unique constraint for idempotence; a failed insert does not create a local
 success authority.
 
-The controller's short-lived local-storage marker can suppress an automatic
-repeat attempt only. It never establishes persistence, and its retry action
-always attempts collection and posting again. Collection or posting failure
-leaves the protected page usable and exposes only a neutral observation-retry
-control.
+The controller's local-storage marker holds the login marker of the last
+successful write and can suppress an automatic repeat attempt only. A page
+without a login marker cannot suppress an attempt. The marker never establishes
+persistence, and the retry action always attempts collection and posting again.
+Collection or posting failure leaves the protected page usable and exposes only
+a neutral toast with a retry control; a successful write shows a short
+self-dismissing toast once per login.
 
 The observation path records data only. It does not make access decisions or
 produce an automated assessment of a reader.

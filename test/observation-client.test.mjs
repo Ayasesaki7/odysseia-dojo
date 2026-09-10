@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-	createObservationController,
-	OBSERVATION_LOCAL_SUCCESS_TTL_MS,
-	OBSERVATION_PAYLOAD_VERSION,
-} from '../src/lib/observation-client.js';
+import { createObservationController, OBSERVATION_PAYLOAD_VERSION } from '../src/lib/observation-client.js';
 import { THUMBMARK_OPTIONS } from '../src/lib/thumbmark-options.js';
 
 function createStorage(initialValues = {}) {
@@ -55,7 +51,6 @@ test('collects and posts only allowlisted browser signals, then reports a low-in
 			}),
 		post: async (payload) => postedPayloads.push(payload),
 		storage: createStorage(),
-		now: () => 10_000,
 		onState: (state) => states.push(state),
 	});
 
@@ -86,7 +81,6 @@ test('keeps reading non-blocking when signal collection fails', async () => {
 			throw new Error('Posting must not run after collection failure.');
 		},
 		storage: createStorage(),
-		now: () => 10_000,
 		onState: (state) => states.push(state),
 	});
 
@@ -105,7 +99,6 @@ test('exposes a neutral retry state after a failed write and retries with a fres
 			if (posts === 1) throw new Error('The observation endpoint is unavailable.');
 		},
 		storage: createStorage(),
-		now: () => 10_000,
 		onState: (state) => states.push(state),
 	});
 
@@ -117,9 +110,9 @@ test('exposes a neutral retry state after a failed write and retries with a fres
 	assert.deepEqual(states, ['retry', 'recorded']);
 });
 
-test('coalesces duplicate automatic attempts and leaves a localStorage hint non-authoritative', async () => {
+test('coalesces duplicate automatic attempts and stays silent for the rest of the same login', async () => {
 	let posts = 0;
-	const now = 10_000;
+	const sessionMarker = '1789000000';
 	const storage = createStorage();
 	const initial = createObservationController({
 		collect: async () => fixtureSignals(),
@@ -127,7 +120,7 @@ test('coalesces duplicate automatic attempts and leaves a localStorage hint non-
 			posts += 1;
 		},
 		storage,
-		now: () => now,
+		sessionMarker,
 		onState: () => {},
 	});
 
@@ -141,16 +134,45 @@ test('coalesces duplicate automatic attempts and leaves a localStorage hint non-
 			posts += 1;
 		},
 		storage,
-		now: () => now,
+		sessionMarker,
 		onState: (state) => states.push(state),
 	});
 
 	await controller.start();
-	assert.equal(posts, 1, 'The recent hint may suppress only an automatic duplicate attempt.');
+	assert.equal(posts, 1, 'The stored login marker may suppress only an automatic duplicate attempt.');
 	assert.deepEqual(states, ['available']);
 
 	await controller.retry();
-	assert.equal(posts, 2, 'A retry must still reach the server despite a local hint.');
+	assert.equal(posts, 2, 'A retry must still reach the server despite a local marker.');
 	assert.deepEqual(states, ['available', 'recorded']);
-	assert.equal(OBSERVATION_LOCAL_SUCCESS_TTL_MS > 0, true);
+});
+
+test('records once more for a new login and whenever the page carries no login marker', async () => {
+	let posts = 0;
+	const storage = createStorage();
+	const states = [];
+	function controllerFor(sessionMarker) {
+		return createObservationController({
+			collect: async () => fixtureSignals(),
+			post: async () => {
+				posts += 1;
+			},
+			storage,
+			sessionMarker,
+			onState: (state) => states.push(state),
+		});
+	}
+
+	await controllerFor('1789000000').start();
+	assert.equal(posts, 1);
+
+	await controllerFor('1789691200').start();
+	assert.equal(posts, 2, 'A newer login writes its own observation.');
+
+	await controllerFor(undefined).start();
+	assert.equal(posts, 3, 'A page without a login marker cannot suppress the attempt.');
+
+	await controllerFor('1789691200').start();
+	assert.equal(posts, 3, 'A marker-less attempt must not overwrite the marker of the current login.');
+	assert.deepEqual(states, ['recorded', 'recorded', 'recorded', 'available']);
 });

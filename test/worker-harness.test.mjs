@@ -942,7 +942,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	});
 
 	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
-		const headers = { Cookie: await signedSessionCookie() };
+		const sessionIssuedAt = Math.floor(Date.now() / 1_000) - 120;
+		const headers = { Cookie: await signedSessionCookie({ issuedAt: sessionIssuedAt }) };
 		const [tutorial, extension, outdated, resourcePage] = await Promise.all([
 			harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers }),
 			harness.fetch('/docs/extensions/account-safety/', { headers }),
@@ -969,9 +970,10 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(tutorialBody, /starlight-menu-button/u);
 		assert.match(tutorialBody, /starlight-theme-select/u);
 		assert.match(tutorialBody, /data-content-category="tutorial"/u);
-		assert.match(tutorialBody, /data-observation-status/u);
+		assert.match(tutorialBody, /data-observation-toast/u);
 		assert.match(tutorialBody, /data-observation-retry/u);
-		assert.match(tutorialBody, /重新记录防代打观测/u);
+		assert.match(tutorialBody, new RegExp(`data-observation-session="${sessionIssuedAt}"`, 'u'));
+		assert.doesNotMatch(tutorialBody, /重新记录防代打观测/u);
 		assert.equal([...tutorialBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
 		assert.doesNotMatch(tutorialBody, /基础教程属于答题范围/u);
 
