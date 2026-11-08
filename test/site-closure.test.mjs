@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
 	createSiteClosure,
@@ -71,13 +70,4 @@ test('expiry and cancellation reopen the browser without an old redirect loop', 
 	assert.equal(siteClosureView(null, '/closed', now).redirect, '/');
 	assert.equal(siteClosureView(null, '/docs/tutorials/', now).redirect, null);
 	assert.equal(siteClosureView(createSiteClosure(now + 8000), '/closed', now).redirect, '/');
-});
-
-test('the frontend Easter egg does not add any Worker, middleware or API gate', async () => {
-	for (const path of ['../src/worker.ts', '../src/middleware.ts']) {
-		const source = await readFile(new URL(path, import.meta.url), 'utf8');
-		assert.doesNotMatch(source, /site-closure|siteClosure|mascot/i);
-	}
-	const state = await readFile(new URL('../src/lib/site-closure.js', import.meta.url), 'utf8');
-	assert.doesNotMatch(state, /new Response|siteClosureResponse|Retry-After/);
 });

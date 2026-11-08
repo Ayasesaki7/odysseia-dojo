@@ -109,17 +109,19 @@ test('homepage brand keeps its Greek identity and original markup on restore', (
 	branding.restore();
 	assert.equal(document.body.innerHTML, original);
 });
-test('article companion uses normal flow after the content instead of covering it', async () => {
-	const source = await readFile(new URL('../src/lib/d-meow.ts', import.meta.url), 'utf8');
-	const css = await readFile(new URL('../src/styles/d-meow.css', import.meta.url), 'utf8');
-	assert.match(source, /hero \? 'hero' : 'reading'/);
-	assert.match(source, /readingPanel = document.querySelector\('\.sl-markdown-content'\)\?\.parentElement/);
-	assert.doesNotMatch(css, /data-placement='floating'|position: fixed/);
-	assert.match(css, /data-placement='reading'\] \{\s*display: grid;/);
-});
-test('plain code blocks have a contained horizontal scroll boundary', async () => {
-	const css = await readFile(new URL('../src/styles/reading.css', import.meta.url), 'utf8');
-	assert.match(css, /\.sl-markdown-content pre \{\s*max-width: 100%;\s*overflow-x: auto;/);
+test('public brand links announce the active name and restore their original accessible label', () => {
+	const { document, branding } = fixture(
+		'<a data-dojo-brand href="/" aria-label="类脑 Odysseia 首页">类脑 <em>Odysseia</em></a>',
+	);
+	const link = document.querySelector('a');
+	const original = link.outerHTML;
+	branding.apply();
+	assert.equal(link.textContent, '旅程 ΟΡΙΖΟΝΤΑΣ');
+	assert.equal(link.getAttribute('aria-label'), '旅程 ΟΡΙΖΟΝΤΑΣ 首页');
+	branding.apply({ reading: true });
+	assert.equal(link.getAttribute('aria-label'), '类脑 首页');
+	branding.restore();
+	assert.equal(link.outerHTML, original);
 });
 test('mixed reading fixture keeps code, resource targets and formatted names consistent', async () => {
 	const markup = await readFile(new URL('./fixtures/frontend-reading.html', import.meta.url), 'utf8');

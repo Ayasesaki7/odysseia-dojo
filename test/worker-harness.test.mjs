@@ -6,6 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createTestHarness } from 'wrangler';
 import { decodeJwt } from 'jose';
+import { parseHTML } from 'linkedom';
+
+import { publicSourceRevisionUrl } from '../src/lib/public-build-config.mjs';
 
 import { signedSessionCookie, TEST_SESSION_SECRET } from './support/session.mjs';
 
@@ -36,10 +39,10 @@ const projectRoot = resolve(testDirectory, '..');
 const harness = createTestHarness({
 	root: projectRoot,
 	workers: [
-			{
-				configPath: './dist/server/wrangler.json',
-				secrets: TEST_WORKER_SECRETS,
-			},
+		{
+			configPath: './dist/server/wrangler.json',
+			secrets: TEST_WORKER_SECRETS,
+		},
 	],
 });
 
@@ -83,7 +86,7 @@ async function pagefindFragmentPath() {
 async function astroStylesheetPath() {
 	const assetDirectory = resolve(projectRoot, 'dist/client/_astro');
 	const entry = (await readdir(assetDirectory, { withFileTypes: true })).find(
-		(candidate) => candidate.isFile() && candidate.name.endsWith('.css')
+		(candidate) => candidate.isFile() && candidate.name.endsWith('.css'),
 	);
 	assert.ok(entry, 'Expected the production fixture build to contain an /_astro/ stylesheet.');
 	return `/_astro/${entry.name}`;
@@ -163,11 +166,16 @@ async function observationCount(env) {
 }
 
 async function seedEligibilityObservation(env, discordUserId, capturedAt, suffix) {
-	await env.DB
-		.prepare(
-			'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?1, ?2, ?3, ?4, ?5)'
+	await env.DB.prepare(
+		'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?1, ?2, ?3, ?4, ?5)',
+	)
+		.bind(
+			`eligibility-${suffix}`,
+			discordUserId,
+			`eligibility-session-${suffix}`,
+			`eligibility-ip-${suffix}`,
+			capturedAt,
 		)
-		.bind(`eligibility-${suffix}`, discordUserId, `eligibility-session-${suffix}`, `eligibility-ip-${suffix}`, capturedAt)
 		.run();
 }
 
@@ -196,17 +204,15 @@ async function seedRetentionObservations(env, timestamp, count, prefix) {
 	const statements = [];
 	for (let index = 0; index < count; index += 1) {
 		statements.push(
-			env.DB
-				.prepare(
-					'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?, ?, ?, ?, ?)'
-				)
-				.bind(
-					`${prefix}-observation-${index}`,
-					`${prefix}-discord-user-${index}`,
-					`${prefix}-session-${index}`,
-					`${prefix}-ip-${index}`,
-					timestamp
-					)
+			env.DB.prepare(
+				'INSERT INTO fingerprint_observations (id, discord_user_id, session_id_hash, ip_hash, captured_at) VALUES (?, ?, ?, ?, ?)',
+			).bind(
+				`${prefix}-observation-${index}`,
+				`${prefix}-discord-user-${index}`,
+				`${prefix}-session-${index}`,
+				`${prefix}-ip-${index}`,
+				timestamp,
+			),
 		);
 	}
 	await env.DB.batch(statements);
@@ -216,11 +222,9 @@ async function seedRetentionOAuthActivity(env, timestamp, count, prefix) {
 	const statements = [];
 	for (let index = 0; index < count; index += 1) {
 		statements.push(
-			env.DB
-				.prepare(
-					'INSERT INTO auth_activity (discord_user_id, discord_username_snapshot, last_successful_oauth_at) VALUES (?, ?, ?)'
-				)
-				.bind(`${prefix}-auth-user-${index}`, `${prefix}-member-${index}`, timestamp)
+			env.DB.prepare(
+				'INSERT INTO auth_activity (discord_user_id, discord_username_snapshot, last_successful_oauth_at) VALUES (?, ?, ?)',
+			).bind(`${prefix}-auth-user-${index}`, `${prefix}-member-${index}`, timestamp),
 		);
 	}
 	await env.DB.batch(statements);
@@ -269,7 +273,7 @@ function memberResponder({ guildPages = [[{ id: TEST_DISCORD_GUILD_ID }]], usern
 					grant_type: 'authorization_code',
 					code: 'fixture-authorization-code',
 					redirect_uri: TEST_DISCORD_REDIRECT_URI,
-				}).toString()
+				}).toString(),
 			);
 			return jsonResponse({ access_token: TEST_DISCORD_ACCESS_TOKEN, token_type: 'Bearer' });
 		}
@@ -364,23 +368,54 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(accessDenied.headers.get('set-cookie'), null);
 
 		const homeBody = await home.text();
+		assert.match(homeBody, /<title>类脑 Odysseia - 道馆挑战<\/title>/u);
+		const { document: homeDocument } = parseHTML(homeBody);
+		assert.equal(homeDocument.querySelector('#site-title [data-dojo-brand]')?.textContent, '类脑 Odysseia');
+		assert.match(homeDocument.querySelector('#site-title')?.textContent ?? '', /道馆挑战/u);
+		assert.match(homeDocument.querySelector('.hero-intro')?.textContent ?? '', /通过 Discord 验证身份/u);
+		assert.ok(homeDocument.querySelector('[data-mascot-button]'));
 		assert.doesNotMatch(homeBody, /教程与答题范围/u);
 		assert.doesNotMatch(homeBody, /现行答题规则/u);
 		assert.doesNotMatch(homeBody, /href="\/#rules"/u);
 		assert.match(homeBody, /<summary>查看完整隐私说明<\/summary>/u);
 		assert.match(homeBody, /<summary>查看教程署名、许可与内容边界<\/summary>/u);
+		assert.match(homeBody, /Discord 用户 ID、当时的用户名快照/u);
+		assert.match(homeBody, /不保存 Discord 授权令牌。/u);
 		assert.match(homeBody, /HMAC-SHA256/u);
-		assert.match(homeBody, /在开始答题时，茉莉会向网站发送 Discord 用户 ID。/u);
-		assert.match(homeBody, /网站仅使用该 ID 对既有防代打观测作出当前答题资格决定/u);
-		assert.match(homeBody, /最小的当前决定，若缺少当前观测则返回稳定的缺失原因。/u);
-		assert.match(homeBody, /不会为资格查询另存查询时间、结果或审计记录。/u);
-		assert.match(homeBody, /浏览器信息、IP、Hash、观测时间和调查数据均不会返回给茉莉/u);
-		assert.match(homeBody, /不改变既有活动业务记录的保留、经验证查询、提前删除或每日有界清理/u);
-		assert.match(homeBody, /不改变 D1 Time Travel 的灾难恢复说明。/u);
-		assert.match(homeBody, /超过 90 天后进入每日定时清理范围/u);
+		assert.match(homeBody, /数据库里没有明文 IP，也没有明文 User-Agent。/u);
+		assert.match(homeBody, /不会只凭单一信号自动给你评分、处罚或封禁/u);
+		assert.match(homeBody, /茉莉只会把你的 Discord 用户 ID 发给网站/u);
+		assert.match(homeBody, /最近 8 天内有没有你的反作弊记录，只回答你现在能不能答题。/u);
+		assert.match(homeBody, /不会为这类查询另存查询时间、结果或审计记录。/u);
+		assert.match(homeBody, /哈希值、记录时间和人工调查内容都不会返回给茉莉/u);
+		assert.match(homeBody, /超过 90 天后进入每日清理范围/u);
 		assert.match(homeBody, /下一次成功清理/u);
-		assert.match(homeBody, /最多可能额外保留 7 天/u);
+		assert.match(homeBody, /最多还会额外保留 7 天/u);
+		assert.match(homeBody, /数据托管在 Cloudflare，网站不承诺把它们存放在某个特定地区。/u);
 		assert.match(homeBody, /请通过社区联系/u);
+		assert.doesNotMatch(homeBody, /防代打/u);
+		assert.doesNotMatch(homeBody, /Session nonce/u);
+		assert.doesNotMatch(homeBody, /Time Travel/u);
+		assert.doesNotMatch(homeBody, /location hint/u);
+		assert.doesNotMatch(homeBody, /最多删除 100 条/u);
+		const navigation = homeDocument.querySelector('header nav[aria-label="公开导航"]');
+		assert.ok(navigation, 'Public header navigation must be present.');
+		assert.deepEqual(
+			[...navigation.querySelectorAll('a')].map((link) => [link.textContent, link.getAttribute('href')]),
+			[
+				['隐私说明', '/#privacy'],
+				['登录', '/login'],
+			],
+		);
+		assert.equal(homeDocument.querySelector('header .header-source-link, header a[href*="github.com"]'), null);
+		const sourceLink = homeDocument.querySelector('footer.public-footer .footer-github-link');
+		assert.equal(
+			sourceLink?.getAttribute('href'),
+			publicSourceRevisionUrl() ?? 'https://github.com/dz114879/odysseia-dojo',
+		);
+		assert.equal(sourceLink?.textContent, 'GitHub ↗');
+		assert.equal(sourceLink?.getAttribute('target'), '_blank');
+		assert.equal(sourceLink?.getAttribute('rel'), 'noopener noreferrer');
 		assert.match(homeBody, /AGPL-3\.0-or-later/u);
 		assert.match(homeBody, /CC BY-NC 4\.0/u);
 		assert.match(homeBody, /Made by KKTsN with 💖/u);
@@ -434,7 +469,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 				assert.equal(guildRequests.length, 2);
 				assert.equal(new URL(guildRequests[1].url).searchParams.get('after'), '200');
 				return callback;
-			}
+			},
 		);
 
 		assert.equal(response.status, 302);
@@ -459,7 +494,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(clearedState, /Max-Age=0/u);
 
 		const storedActivity = await env.DB.prepare(
-			'SELECT discord_user_id, discord_username_snapshot, last_successful_oauth_at FROM auth_activity'
+			'SELECT discord_user_id, discord_username_snapshot, last_successful_oauth_at FROM auth_activity',
 		).first();
 		assert.deepEqual(storedActivity?.discord_user_id, '123456789012345678');
 		assert.deepEqual(storedActivity?.discord_username_snapshot, 'fixture-member');
@@ -489,7 +524,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 				assert.equal(mismatched.status, 400);
 				assert.match(responseCookie(mismatched, 'dojo_oauth_state'), /Max-Age=0/u);
 				assert.equal(requests.length, 0);
-			}
+			},
 		);
 	});
 
@@ -500,9 +535,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(locationPath(declined), '/auth-cancelled');
 
 		const nonMemberStart = await beginOAuth();
-		const nonMember = await withDiscordResponder(
-			memberResponder({ guildPages: [[]] }),
-			() => finishOAuth(nonMemberStart, { code: 'fixture-authorization-code' })
+		const nonMember = await withDiscordResponder(memberResponder({ guildPages: [[]] }), () =>
+			finishOAuth(nonMemberStart, { code: 'fixture-authorization-code' }),
 		);
 		assert.equal(nonMember.status, 302);
 		assert.equal(locationPath(nonMember), '/access-denied');
@@ -514,7 +548,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 				assert.equal(new URL(request.url).pathname, '/api/v10/oauth2/token');
 				return new Response('Discord is unavailable', { status: 503 });
 			},
-			() => finishOAuth(failedStart, { code: 'fixture-authorization-code' })
+			() => finishOAuth(failedStart, { code: 'fixture-authorization-code' }),
 		);
 		assert.equal(failed.status, 302);
 		assert.equal(locationPath(failed), '/discord-unavailable');
@@ -523,9 +557,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	test('treats malformed Guild payloads as Discord failures instead of non-membership', async () => {
 		for (const guildPage of [[{}], ['not-a-guild']]) {
 			const start = await beginOAuth();
-			const response = await withDiscordResponder(
-				memberResponder({ guildPages: [guildPage] }),
-				() => finishOAuth(start, { code: 'fixture-authorization-code' })
+			const response = await withDiscordResponder(memberResponder({ guildPages: [guildPage] }), () =>
+				finishOAuth(start, { code: 'fixture-authorization-code' }),
 			);
 
 			assert.equal(response.status, 302);
@@ -542,9 +575,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 			'/public/',
 		]) {
 			const start = await beginOAuth(unsafeReturnTo);
-			const response = await withDiscordResponder(
-				memberResponder(),
-				() => finishOAuth(start, { code: 'fixture-authorization-code' })
+			const response = await withDiscordResponder(memberResponder(), () =>
+				finishOAuth(start, { code: 'fixture-authorization-code' }),
 			);
 			assert.equal(locationPath(response), '/docs/tutorials/', unsafeReturnTo);
 		}
@@ -555,9 +587,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		await env.DB.prepare('DROP TABLE IF EXISTS auth_activity').run();
 		const start = await beginOAuth();
 		harness.clearLogs();
-		const response = await withDiscordResponder(
-			memberResponder(),
-			() => finishOAuth(start, { code: 'fixture-authorization-code' })
+		const response = await withDiscordResponder(memberResponder(), () =>
+			finishOAuth(start, { code: 'fixture-authorization-code' }),
 		);
 		assert.equal(response.status, 302);
 		assert.equal(locationPath(response), '/docs/tutorials/');
@@ -567,7 +598,10 @@ describe('production Worker test seam', { concurrency: false }, () => {
 			.filter((log) => log.level === 'error')
 			.map((log) => log.message);
 		assert.deepEqual(errors, ['Unable to record OAuth activity.']);
-		assert.doesNotMatch(errors.join('\n'), /test-discord-access-token|dojo_session|test-session-secret|123456789012345678/u);
+		assert.doesNotMatch(
+			errors.join('\n'),
+			/test-discord-access-token|dojo_session|test-session-secret|123456789012345678/u,
+		);
 	});
 
 	test('clears the fixed session cookie at logout', async () => {
@@ -592,15 +626,13 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(first.headers.get('cache-control'), 'no-store');
 		assert.equal(await first.text(), '');
 
-		const row = await env.DB
-			.prepare(
-				`SELECT discord_user_id, discord_username_snapshot, session_id_hash,
+		const row = await env.DB.prepare(
+			`SELECT discord_user_id, discord_username_snapshot, session_id_hash,
 				 browser_fingerprint_hash, canvas_hash, webgl_hash, user_agent_hash,
 				 platform, timezone, screen_resolution, language, ip_hash, ip_prefix_hash,
 				 country, asn, payload_version, hash_key_version, captured_at
-				 FROM fingerprint_observations`
-			)
-			.first();
+				 FROM fingerprint_observations`,
+		).first();
 		const { captured_at: capturedAt, ...storedObservation } = row ?? {};
 		assert.deepEqual(storedObservation, {
 			discord_user_id: '123456789012345678',
@@ -657,15 +689,13 @@ describe('production Worker test seam', { concurrency: false }, () => {
 
 	test('keeps a failed observation write retryable for the same Session', async () => {
 		const env = await applyD1Migrations();
-		await env.DB
-			.prepare(
-				`CREATE TRIGGER force_observation_insert_failure
+		await env.DB.prepare(
+			`CREATE TRIGGER force_observation_insert_failure
 				 BEFORE INSERT ON fingerprint_observations
 				 BEGIN
 					SELECT RAISE(ABORT, 'fixture observation write failure');
-				 END`
-			)
-			.run();
+				 END`,
+		).run();
 
 		const failed = await submitFingerprint();
 		assert.equal(failed.status, 503);
@@ -793,7 +823,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 			env,
 			TEST_QUIZ_DISCORD_USER_ID,
 			new Date(now - 8 * day + 60_000).toISOString(),
-			'current'
+			'current',
 		);
 		await seedEligibilityObservation(env, expiredUserId, new Date(now - 8 * day - 60_000).toISOString(), 'expired');
 		await seedEligibilityObservation(env, futureUserId, new Date(now + 60_000).toISOString(), 'future');
@@ -835,10 +865,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	test('fails closed for an anonymous protected document request', async () => {
 		const document = await harness.fetch('/docs/tutorials/discord-and-odysseia/', { redirect: 'manual' });
 		assert.equal(document.status, 302);
-		assert.equal(
-			document.headers.get('location'),
-			'/login?returnTo=%2Fdocs%2Ftutorials%2Fdiscord-and-odysseia%2F'
-		);
+		assert.equal(document.headers.get('location'), '/login?returnTo=%2Fdocs%2Ftutorials%2Fdiscord-and-odysseia%2F');
 		assert.equal(document.headers.get('cache-control'), 'no-store');
 	});
 
@@ -942,7 +969,8 @@ describe('production Worker test seam', { concurrency: false }, () => {
 	});
 
 	test('keeps the native Starlight reading experience available to authenticated readers', async () => {
-		const headers = { Cookie: await signedSessionCookie() };
+		const sessionIssuedAt = Math.floor(Date.now() / 1_000) - 120;
+		const headers = { Cookie: await signedSessionCookie({ issuedAt: sessionIssuedAt }) };
 		const [tutorial, extension, outdated, resourcePage] = await Promise.all([
 			harness.fetch('/docs/tutorials/discord-and-odysseia/', { headers }),
 			harness.fetch('/docs/extensions/account-safety/', { headers }),
@@ -968,10 +996,13 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.match(tutorialBody, /<summary>可选：进一步了解<\/summary>/u);
 		assert.match(tutorialBody, /starlight-menu-button/u);
 		assert.match(tutorialBody, /starlight-theme-select/u);
+		const { document: tutorialDocument } = parseHTML(tutorialBody);
+		assert.equal(tutorialDocument.querySelector('header .header-source-link, header a[href*="github.com"]'), null);
 		assert.match(tutorialBody, /data-content-category="tutorial"/u);
-		assert.match(tutorialBody, /data-observation-status/u);
+		assert.match(tutorialBody, /data-observation-toast/u);
 		assert.match(tutorialBody, /data-observation-retry/u);
-		assert.match(tutorialBody, /重新记录防代打观测/u);
+		assert.match(tutorialBody, new RegExp(`data-observation-session="${sessionIssuedAt}"`, 'u'));
+		assert.doesNotMatch(tutorialBody, /重新记录防代打观测/u);
 		assert.equal([...tutorialBody.matchAll(/<h1(?:\s|>)/gu)].length, 1);
 		assert.doesNotMatch(tutorialBody, /基础教程属于答题范围/u);
 
@@ -1002,11 +1033,13 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		const page = await response.text();
 		const stylesheets = [...page.matchAll(/<link[^>]+href="([^"]+\.css)"/gu)].map((match) => match[1]);
 		assert.ok(stylesheets.length > 0, 'The reading page must load a stylesheet.');
-		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join('\n');
+		const stylesheet = (await Promise.all(stylesheets.map(async (path) => (await harness.fetch(path)).text()))).join(
+			'\n',
+		);
 		assert.match(stylesheet, /--sl-content-width\s*:\s*min\(66rem,\s*92vw\)/u);
 		assert.match(
 			stylesheet,
-			/mobile-starlight-toc\s+\.isMobile\s+a\s*\{[^}]*-webkit-tap-highlight-color\s*:\s*transparent/u
+			/mobile-starlight-toc\s+\.isMobile\s+a\s*\{[^}]*-webkit-tap-highlight-color\s*:\s*transparent/u,
 		);
 		assert.match(stylesheet, /overflow-wrap\s*:\s*anywhere/u);
 	});
@@ -1104,7 +1137,9 @@ describe('production Worker test seam', { concurrency: false }, () => {
 		assert.equal(await anonymous.text(), '');
 
 		const fragmentPath = await pagefindFragmentPath();
-		const authenticatedFragment = await harness.fetch(fragmentPath, { headers: { Cookie: await signedSessionCookie() } });
+		const authenticatedFragment = await harness.fetch(fragmentPath, {
+			headers: { Cookie: await signedSessionCookie() },
+		});
 		assert.equal(authenticatedFragment.status, 200);
 		assert.equal(authenticatedFragment.headers.get('cache-control'), 'private, no-store, max-age=0');
 
@@ -1135,7 +1170,7 @@ describe('production Worker test seam', { concurrency: false }, () => {
 				.getLogs()
 				.filter((log) => log.level === 'error')
 				.map((log) => log.message),
-			[]
+			[],
 		);
 
 		const [observation, oauthActivity] = await Promise.all([

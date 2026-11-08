@@ -1,9 +1,8 @@
 import { OBSERVATION_PAYLOAD_VERSION } from './observation-contract.js';
 
 export { OBSERVATION_PAYLOAD_VERSION } from './observation-contract.js';
-export const OBSERVATION_LOCAL_SUCCESS_TTL_MS = 30_000;
 
-const LOCAL_SUCCESS_KEY = `dojo.observation.local-success.v${OBSERVATION_PAYLOAD_VERSION}`;
+const RECORDED_SESSION_KEY = `dojo.observation.recorded-session.v${OBSERVATION_PAYLOAD_VERSION}`;
 
 function requiredString(value, field, maximumLength) {
 	if (typeof value !== 'string' || value.length === 0 || value.length > maximumLength) {
@@ -53,22 +52,19 @@ export function allowlistedObservationPayload(signals) {
 	return payload;
 }
 
-function hasRecentLocalSuccess(storage, now) {
-	if (!storage) return false;
+function hasRecordedSession(storage, sessionMarker) {
+	if (!storage || !sessionMarker) return false;
 	try {
-		const storedAt = storage.getItem(LOCAL_SUCCESS_KEY);
-		if (storedAt === null) return false;
-		const recordedAt = Number(storedAt);
-		return Number.isFinite(recordedAt) && recordedAt <= now && now - recordedAt < OBSERVATION_LOCAL_SUCCESS_TTL_MS;
+		return storage.getItem(RECORDED_SESSION_KEY) === sessionMarker;
 	} catch {
 		return false;
 	}
 }
 
-function recordLocalSuccess(storage, now) {
-	if (!storage) return;
+function recordSession(storage, sessionMarker) {
+	if (!storage || !sessionMarker) return;
 	try {
-		storage.setItem(LOCAL_SUCCESS_KEY, String(now));
+		storage.setItem(RECORDED_SESSION_KEY, sessionMarker);
 	} catch {
 		// Browser storage is an optional request-suppression hint, not an authority.
 	}
@@ -82,20 +78,19 @@ function notify(onState, state) {
 	}
 }
 
-export function createObservationController({ collect, post, storage, now = () => Date.now(), onState = (_state) => {} }) {
+export function createObservationController({ collect, post, storage, sessionMarker, onState = (_state) => {} }) {
 	let inFlight;
 
 	async function run(force) {
-		const timestamp = now();
-		if (!force && hasRecentLocalSuccess(storage, timestamp)) {
-			notify(onState, 'available');
+		if (!force && hasRecordedSession(storage, sessionMarker)) {
+			notify(onState, 'already-recorded');
 			return;
 		}
 
 		try {
 			const payload = allowlistedObservationPayload(await collect());
 			await post(payload);
-			recordLocalSuccess(storage, timestamp);
+			recordSession(storage, sessionMarker);
 			notify(onState, 'recorded');
 		} catch {
 			notify(onState, 'retry');

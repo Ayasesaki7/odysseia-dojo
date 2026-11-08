@@ -1,4 +1,4 @@
-import { verifySession } from './session';
+import { verifySession, type SessionClaims } from './session';
 
 type ProtectedRequestKind = 'document' | 'resource';
 
@@ -54,18 +54,32 @@ function rejectedProtectedRequest(request: Request, kind: ProtectedRequestKind):
 	});
 }
 
-async function rejectUnauthenticatedProtectedRequest(
+async function authenticateProtectedRequest(
 	request: Request,
 	sessionSecret: string,
 	kind: ProtectedRequestKind | undefined
-): Promise<Response | undefined> {
-	if (!kind) return undefined;
+): Promise<{ rejection?: Response; claims?: SessionClaims }> {
+	if (!kind) return {};
 
 	try {
-		await verifySession(request, sessionSecret);
+		return { claims: await verifySession(request, sessionSecret) };
 	} catch {
-		return rejectedProtectedRequest(request, kind);
+		return { rejection: rejectedProtectedRequest(request, kind) };
 	}
+}
+
+function withObservationSessionMarker(response: Response, sessionIssuedAt: number | undefined): Response {
+	if (typeof sessionIssuedAt !== 'number') return response;
+	if (!(response.headers.get('content-type') ?? '').includes('text/html')) return response;
+
+	// Protected documents are prerendered, so the current login marker is added per response.
+	return new HTMLRewriter()
+		.on('[data-observation-toast]', {
+			element(element) {
+				element.setAttribute('data-observation-session', String(sessionIssuedAt));
+			},
+		})
+		.transform(response);
 }
 
 function privateProtectedResponse(kind: ProtectedRequestKind | undefined, response: Response): Response {
@@ -99,11 +113,13 @@ export async function applyProtectedAccessPolicy(
 		return unavailableProtectedRequest();
 	}
 
-	const rejection = await rejectUnauthenticatedProtectedRequest(request, sessionSecret, kind);
+	const { rejection, claims } = await authenticateProtectedRequest(request, sessionSecret, kind);
 	if (rejection) return rejection;
 
 	try {
-		return privateProtectedResponse(kind, await continueRequest());
+		let response = await continueRequest();
+		if (kind === 'document') response = withObservationSessionMarker(response, claims?.iat);
+		return privateProtectedResponse(kind, response);
 	} catch (error) {
 		if (kind) return unavailableProtectedRequest();
 		throw error;

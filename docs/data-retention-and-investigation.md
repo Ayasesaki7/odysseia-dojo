@@ -113,6 +113,11 @@ existing recovery copy immediately, and that copy must not be restored to evade
 the request. Do not describe the cleanup eligibility rule and recovery window
 as an absolute 90-day or 97-day deletion deadline.
 
+D1 uses the `apac` location hint as a latency preference only. It is not a data
+residency commitment for Hong Kong, mainland China, or any other region, so the
+public disclosure states only that the data is hosted on Cloudflare without a
+regional promise.
+
 Monitor D1 capacity before the Free limit is reached. If capacity approaches a
 limit, first investigate unusual traffic, avoid broad or repeated query runs,
 and check the daily cleanup's Cron Events. If capacity still requires action,

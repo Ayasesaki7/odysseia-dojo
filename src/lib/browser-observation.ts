@@ -63,42 +63,46 @@ function browserStorage(): Storage | undefined {
 	}
 }
 
-function renderObservationState(status: HTMLElement | null, retry: HTMLButtonElement | null, state: string): void {
-	if (state === 'recorded') {
-		if (status) {
-			status.hidden = false;
-			status.textContent = '防代打观测已记录。';
-		}
-		if (retry) retry.hidden = true;
-		return;
-	}
-
-	if (state === 'available') {
-		if (status) status.hidden = true;
-		if (retry) retry.hidden = false;
-		return;
-	}
-
-	if (status) {
-		status.hidden = false;
-		status.textContent = '防代打观测未记录，请重试';
-	}
-	if (retry) retry.hidden = false;
-}
+const SUCCESS_TOAST_DURATION_MS = 4_000;
 
 export function startBrowserObservation(documentRoot: Document = document) {
-	const status = documentRoot.querySelector<HTMLElement>('[data-observation-status]');
-	const retry = documentRoot.querySelector<HTMLButtonElement>('[data-observation-retry]');
+	const toast = documentRoot.querySelector<HTMLElement>('[data-observation-toast]');
+	const message = toast?.querySelector<HTMLElement>('[data-observation-message]');
+	const actions = toast?.querySelector<HTMLElement>('[data-observation-actions]');
+	let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function hideToast(): void {
+		clearTimeout(dismissTimer);
+		dismissTimer = undefined;
+		if (toast) toast.hidden = true;
+	}
+
+	function showToast(tone: 'success' | 'notice', text: string): void {
+		if (!toast) return;
+		clearTimeout(dismissTimer);
+		dismissTimer = undefined;
+		toast.dataset.observationTone = tone;
+		if (message) message.textContent = text;
+		if (actions) actions.hidden = tone === 'success';
+		toast.hidden = false;
+		if (tone === 'success') dismissTimer = setTimeout(hideToast, SUCCESS_TOAST_DURATION_MS);
+	}
+
 	const controller = createObservationController({
 		collect: collectBrowserObservation,
 		post: postBrowserObservation,
 		storage: browserStorage(),
-		onState: (state: string) => renderObservationState(status, retry, state),
+		sessionMarker: toast?.dataset.observationSession,
+		onState: (state: string) => {
+			if (state === 'recorded') showToast('success', '反作弊数据已记录');
+			else if (state === 'retry') showToast('notice', '反作弊数据未记录');
+		},
 	});
 
-	retry?.addEventListener('click', () => {
+	toast?.querySelector<HTMLButtonElement>('[data-observation-retry]')?.addEventListener('click', () => {
 		void controller.retry();
 	});
+	toast?.querySelector<HTMLButtonElement>('[data-observation-dismiss]')?.addEventListener('click', hideToast);
 	void controller.start();
 	return controller;
 }

@@ -17,10 +17,10 @@ if (requestedReturnTo) oauthUrl.searchParams.set('returnTo', requestedReturnTo);
 			<div class="notice notice-warning" role="note" aria-labelledby="login-notice-title">
 				<h2 id="login-notice-title">登录前请先了解</h2>
 				<p>
-					为确认社区成员资格，登录会使用 Discord 身份信息。成功验证并加载受保护教程后，网站会尝试收集有限的防代打浏览器与网络信号，并仅用于人工调查关联线索。
+					为确认社区成员资格，登录会使用 Discord 身份信息。成功验证并加载受保护教程后，网站会尝试收集有限的反作弊浏览器与网络信号，并仅用于人工调查关联线索。
 				</p>
 				<p>
-					这些信号并不用于单一自动评分、处罚或封禁；完整的采集内容、HMAC 处理、保留期限和删除渠道见<a href="/#privacy">首页隐私说明</a>。
+					这些信号并不用于单一自动评分、处罚或封禁；完整的收集内容、哈希处理、保留期限和删除渠道见<a href="/#privacy">首页隐私说明</a>。
 				</p>
 			</div>
 				<a class="button" data-discord-login href={`${oauthUrl.pathname}${oauthUrl.search}`}>使用 Discord 登录</a>

@@ -1,4 +1,6 @@
 ---
+import ObservationToast from './ObservationToast.astro';
+
 const { category, isOutdated, title } = Astro.locals.starlightRoute.entry.data;
 const categoryLabel = category === 'tutorial' ? '基础教程' : '扩展阅读';
 ---
@@ -13,17 +15,9 @@ const categoryLabel = category === 'tutorial' ? '基础教程' : '扩展阅读';
 			</aside>
 		)
 	}
-	<div class="dojo-observation" data-observation-flow>
-		<p data-observation-status role="status" hidden></p>
-		<button data-observation-retry type="button" hidden>重新记录防代打观测</button>
-	</div>
 </div>
 
-<script>
-	import { startBrowserObservation } from '../lib/browser-observation';
-
-	startBrowserObservation();
-</script>
+<ObservationToast />
 
 <style>
 	@layer starlight.core {
@@ -48,20 +42,6 @@ const categoryLabel = category === 'tutorial' ? '基础教程' : '扩展阅读';
 			padding: 0.75rem 1rem;
 			background: var(--sl-color-orange-low);
 			color: var(--sl-color-text);
-		}
-
-		.dojo-observation {
-			margin-top: 0.875rem;
-			font-size: var(--sl-text-sm);
-		}
-
-		.dojo-observation p {
-			margin: 0;
-			color: var(--sl-color-gray-2);
-		}
-
-		.dojo-observation button {
-			margin-top: 0.5rem;
 		}
 	}
 </style>

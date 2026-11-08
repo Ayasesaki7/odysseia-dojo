@@ -36,20 +36,38 @@ if (canonicalOrigin) {
 		<DMeowTheme />
 	</head>
 	<body>
-		{!minimal && <>
-		<a class="skip-link" href="#main-content">跳转到主要内容</a>
-		<header class="public-header">
-			<a class="public-brand" data-dojo-brand href="/" aria-label="类脑 Odysseia 首页">类脑 <span>Odysseia</span></a>
-			<nav aria-label="公开导航">
-				<a href="/#privacy">隐私说明</a>
-				<a href="/login">登录</a>
-			</nav>
-		</header>
-		</>}
-		<div id="main-content" tabindex="-1"><slot /></div>
-		{!minimal && <footer class="public-footer">
-			<p>Made by KKTsN with 💖</p>
-			<a class="footer-github-link" href={sourceRevisionUrl} target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看项目源码（新标签页）">GitHub <span aria-hidden="true">↗</span></a>
-		</footer>}
+		{!minimal && (
+			<>
+				<a class="skip-link" href="#main-content">
+					跳转到主要内容
+				</a>
+				<header class="public-header">
+					<a class="public-brand" data-dojo-brand href="/" aria-label="类脑 Odysseia 首页">
+						类脑 <span>Odysseia</span>
+					</a>
+					<nav aria-label="公开导航">
+						<a href="/#privacy">隐私说明</a>
+						<a href="/login">登录</a>
+					</nav>
+				</header>
+			</>
+		)}
+		<div id="main-content" tabindex="-1">
+			<slot />
+		</div>
+		{!minimal && (
+			<footer class="public-footer">
+				<p>Made by KKTsN with 💖</p>
+				<a
+					class="footer-github-link"
+					href={sourceRevisionUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					aria-label="在 GitHub 查看项目源码（新标签页）"
+				>
+					GitHub <span aria-hidden="true">↗</span>
+				</a>
+			</footer>
+		)}
 	</body>
 </html>

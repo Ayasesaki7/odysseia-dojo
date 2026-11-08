@@ -22,7 +22,7 @@ const inlineTags = new Set([
 	'BDO',
 ]);
 const excluded =
-	'script, style, noscript, code, pre, kbd, samp, textarea, input, select, svg, math, [contenteditable], [data-d-meow-ui], [data-d-meow-rewrite], [data-dojo-brand], [data-mascot], [data-d-meow-preserve], .public-footer';
+	'script, style, noscript, code, pre, kbd, samp, textarea, input, select, svg, math, [contenteditable], [data-d-meow-ui], [data-d-meow-rewrite], [data-mascot], [data-d-meow-preserve], .public-footer';
 
 /** @param {Element} root @returns {Text[][]} */
 function textRuns(root) {
@@ -41,7 +41,7 @@ function textRuns(root) {
 				pending.push(/** @type {Text} */ (child));
 			} else if (child.nodeType === 1) {
 				const element = /** @type {Element} */ (child);
-				if (element.matches(excluded)) flush();
+				if (element.matches(excluded) || element.hasAttribute('data-dojo-brand')) flush();
 				else if (inlineTags.has(element.tagName) && !element.hasAttribute('role')) visit(element);
 				else {
 					flush();

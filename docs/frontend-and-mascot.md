@@ -89,10 +89,10 @@ restores the original appearance without logging in automatically.
   sheet, a small user-supplied takeover illustration, and two-frame double-hand waving. D喵 is not a poke
   button, cannot be dragged, and never becomes angry or closes the site. Its bubble
   says `旅程宣布独立！`. A small pause control and reduced-motion support stop motion.
-- `test/d-meow-state.test.mjs` covers shortcut exclusion/reset/timing, name tokens,
-  original logout-route reuse and presentation-only safeguards.
+- `test/d-meow-state.test.mjs` covers shortcut exclusion/reset/timing and exact name
+  tokens. Existing Worker tests cover the logout route and protected access.
 - `test/d-meow-branding.test.mjs` covers split formatting, dynamic results, repeated
-  toggles, node identity, code and resource preservation, and reading layout guards.
+  toggles, accessible brand labels, node identity, and code/resource preservation.
 
 `public/mascot/d-meow-wave-{1,2}.webp` are two aligned 360×480 transparent frames.
 They were generated through the user-requested `gpt-image-2` CLI/API route using
@@ -142,8 +142,9 @@ The public fixture preview cannot establish compatibility with every private MDX
 component or prove real Discord login. Before merging, the maintainer should check
 the branch against representative authorized production content and run the existing
 Linux fixture CI. Windows symlink-permission failures must not be worked around by
-skipping the content-boundary tests. Artwork licensing/permission should also be
-confirmed by the maintainer before publication.
+skipping the content-boundary tests. The site operator has confirmed that all mascot
+and D喵 artwork shipped in `public/mascot/*.webp` is approved for distribution in
+this public repository. This approval does not change the original owners' rights.
 
 ## Original artwork and typography
 
