@@ -265,7 +265,7 @@ export function startDMeowTheme() {
 		const next = preference();
 		if (next === active) return;
 		applyTheme(next);
-		if (next && /^\/docs\//.test(location.pathname)) location.replace('/');
+		if (next && isDMeowReadingPage(location.pathname)) location.replace('/');
 	});
 	window.addEventListener('pagehide', () => {
 		clearTimeout(transitionTimer);
@@ -279,7 +279,7 @@ export function startDMeowTheme() {
 		}
 		const next = preference();
 		const changed = next !== active;
-		if (transitioning || (changed && next && /^\/docs\//.test(location.pathname))) {
+		if (transitioning || (changed && next && isDMeowReadingPage(location.pathname))) {
 			location.replace('/');
 			return;
 		}

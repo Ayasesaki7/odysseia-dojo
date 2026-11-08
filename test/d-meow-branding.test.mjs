@@ -85,6 +85,49 @@ test('code, form values, editable content, drawings and preserved credits are un
 	branding.apply({ reading: true });
 	assert.equal(document.body.innerHTML, original);
 });
+test('semantic author links and citations preserve credits without excluding surrounding article prose', () => {
+	const { document, window, branding } = fixture(`
+		<article>
+			<p id="prose">类脑社区 <a href="/docs/">Odysseia 教程</a></p>
+			<p>作者：<a rel="external author" href="/authors/example" aria-label="Odysseia 作者"><strong>Odysseia</strong></a></p>
+			<p>参考：<cite title="类脑参考"><a href="/references/example">类脑 <em>Odysseia</em></a></cite></p>
+		</article>`);
+	const author = document.querySelector('[rel~="author"]');
+	const citation = document.querySelector('cite');
+	const authorMarkup = author.outerHTML;
+	const citationMarkup = citation.outerHTML;
+	const originalText = author.querySelector('strong').firstChild;
+	let clicks = 0;
+	author.addEventListener('click', () => clicks++);
+	for (const reading of [false, true]) {
+		branding.apply({ reading });
+		assert.equal(author.outerHTML, authorMarkup);
+		assert.equal(citation.outerHTML, citationMarkup);
+		assert.equal(author.querySelector('strong').firstChild, originalText);
+		assert.match(document.querySelector('#prose').textContent, /旅程/);
+		assert.equal(document.querySelector('#prose a').getAttribute('href'), '/docs/');
+		branding.restore();
+	}
+	author.dispatchEvent(new window.Event('click'));
+	assert.equal(clicks, 1);
+});
+test('the licensing boundary preserves credit text, brand nodes and accessible names', () => {
+	const { document, branding } = fixture(`
+		<p id="prose">类脑社区</p>
+		<section id="licensing" data-d-meow-preserve>
+			<h2>教程署名</h2><p>作者：类脑教程组</p>
+			<a data-dojo-brand href="/authors/example" aria-label="Odysseia 作者">Odysseia</a>
+		</section>`);
+	const licensing = document.querySelector('#licensing');
+	const original = licensing.outerHTML;
+	for (const reading of [false, true]) {
+		branding.apply({ reading });
+		assert.equal(licensing.outerHTML, original);
+		assert.match(document.querySelector('#prose').textContent, /旅程/);
+		branding.restore();
+		assert.equal(licensing.outerHTML, original);
+	}
+});
 test('accessible names restore exactly without modifying resource URLs', () => {
 	const { document, branding } = fixture(
 		'<a aria-label="类脑 Odysseia 首页" href="/docs/tutorials/">类脑 Odysseia</a><img src="/protected/类脑.png" alt="类脑 Odysseia 示意图">',

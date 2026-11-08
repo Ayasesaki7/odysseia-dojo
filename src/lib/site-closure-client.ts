@@ -9,6 +9,9 @@ import {
 } from './site-closure.js';
 import type { SiteClosure } from './site-closure.js';
 
+// Used only when neither persistence channel retained our write; never shadow shared cancellation.
+let documentClosure: SiteClosure | null = null;
+
 export function readBrowserClosure(): SiteClosure | null {
 	let stored: SiteClosure | null = null;
 	let cookie: SiteClosure | null = null;
@@ -22,12 +25,17 @@ export function readBrowserClosure(): SiteClosure | null {
 	} catch {
 		/* Cookies can be disabled. */
 	}
-	if (!stored) return cookie;
-	if (!cookie) return stored;
-	return stored.reopensAt >= cookie.reopensAt ? stored : cookie;
+	const shared = !stored ? cookie : !cookie || stored.reopensAt >= cookie.reopensAt ? stored : cookie;
+	if (shared) {
+		documentClosure = null;
+		return shared;
+	}
+	if (documentClosure) documentClosure = parseSiteClosure(serializeSiteClosure(documentClosure));
+	return documentClosure;
 }
 
 function writeBrowserClosure(closure: SiteClosure | null) {
+	documentClosure = null;
 	try {
 		if (closure) localStorage.setItem(SITE_CLOSURE_STORAGE, serializeSiteClosure(closure));
 		else localStorage.removeItem(SITE_CLOSURE_STORAGE);
@@ -39,6 +47,8 @@ function writeBrowserClosure(closure: SiteClosure | null) {
 	} catch {
 		/* Use local storage if available. */
 	}
+	// Cookie writes can fail silently, so confirm persistence rather than relying on exceptions.
+	if (closure && !readBrowserClosure()) documentClosure = closure;
 	window.dispatchEvent(new Event('dojo:closure-change'));
 }
 

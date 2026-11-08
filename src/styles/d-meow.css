@@ -139,7 +139,6 @@ html[data-dojo-theme='d-meow'] .mascot-art img {
 .d-meow-companion[data-placement='reading'] .d-meow-pause {
 	grid-column: 2;
 	grid-row: 3;
-	min-height: 32px;
 	font-size: 11px;
 }
 .d-meow-sprite {
@@ -205,6 +204,8 @@ html[data-dojo-theme='d-meow'] .mascot-art img {
 .d-meow-pause {
 	border: 0;
 	padding: 3px 8px;
+	min-width: 44px;
+	min-height: 44px;
 	background: none;
 	color: #294c65;
 	font: inherit;

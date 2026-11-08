@@ -13,7 +13,6 @@ const inlineTags = new Set([
 	'SMALL',
 	'MARK',
 	'ABBR',
-	'CITE',
 	'Q',
 	'TIME',
 	'SUB',
@@ -22,7 +21,7 @@ const inlineTags = new Set([
 	'BDO',
 ]);
 const excluded =
-	'script, style, noscript, code, pre, kbd, samp, textarea, input, select, svg, math, [contenteditable], [data-d-meow-ui], [data-d-meow-rewrite], [data-mascot], [data-d-meow-preserve], .public-footer';
+	'script, style, noscript, code, pre, kbd, samp, textarea, input, select, svg, math, cite, [rel~="author"], [contenteditable], [data-d-meow-ui], [data-d-meow-rewrite], [data-mascot], [data-d-meow-preserve], .public-footer';
 
 /** @param {Element} root @returns {Text[][]} */
 function textRuns(root) {
@@ -108,7 +107,7 @@ export function createDMeowBranding(document) {
 		restore();
 		if (!document.body) return;
 		for (const brand of document.querySelectorAll('[data-dojo-brand]')) {
-			if (brand.closest('[data-d-meow-preserve], [data-d-meow-ui], .public-footer')) continue;
+			if (brand.closest(excluded)) continue;
 			const fragment = document.createDocumentFragment();
 			for (const child of [...brand.childNodes]) fragment.appendChild(child);
 			brands.set(/** @type {HTMLElement} */ (brand), fragment);

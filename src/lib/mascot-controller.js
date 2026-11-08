@@ -25,6 +25,7 @@ const replies = [
  *   onReply?: (text: string) => void,
  *   onClose?: () => void,
  *   onFury?: (closesAt: number) => void,
+ *   readClosesAt?: () => number | null,
  *   now?: () => number,
  *   schedule?: typeof setTimeout,
  *   cancel?: typeof clearTimeout,
@@ -35,6 +36,7 @@ export function createMascotController({
 	onReply = () => {},
 	onClose = () => {},
 	onFury = () => {},
+	readClosesAt,
 	now = Date.now,
 	schedule = setTimeout,
 	cancel = clearTimeout,
@@ -62,6 +64,15 @@ export function createMascotController({
 
 	function tick() {
 		if (disposed || state.phase !== 'countdown') return;
+		// Re-read shared state on the existing tick, even if a tab's storage event was delayed.
+		if (readClosesAt) {
+			const closesAt = readClosesAt();
+			if (closesAt === null) {
+				reset();
+				return;
+			}
+			deadline = closesAt;
+		}
 		const remaining = Math.max(0, deadline - now());
 		state.secondsRemaining = Math.ceil(remaining / 1000);
 		if (remaining === 0) {

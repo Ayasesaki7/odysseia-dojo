@@ -17,7 +17,7 @@
     "lint": "npm run content:fixtures && eslint .",
     "check": "npm run content:fixtures && astro check",
     "test": "npm run content:fixtures && node --test test/content-assembly.test.mjs test/public-build-config.test.mjs test/public-fixture-ci.test.mjs test/public-fixture-boundary.test.mjs test/fixture-output-isolation.test.mjs test/fixture-reference-validation.test.mjs test/observation-logic.test.mjs test/observation-client.test.mjs test/quiz-eligibility.test.mjs test/investigation-queries.test.mjs test/mascot-controller.test.mjs test/site-closure.test.mjs test/d-meow-state.test.mjs test/d-meow-branding.test.mjs",
-    "test:frontend": "node --test test/mascot-controller.test.mjs test/site-closure.test.mjs test/d-meow-state.test.mjs test/d-meow-branding.test.mjs",
+    "test:frontend": "npm run content:fixtures && node --test test/mascot-controller.test.mjs test/site-closure.test.mjs test/d-meow-state.test.mjs test/d-meow-branding.test.mjs",
     "test:worker": "npm run content:fixtures && npm run build && node --test test/worker-harness.test.mjs",
     "build": "npm run content:fixtures && npm run verify:fixture-boundary && node scripts/validate-public-build-config.mjs && astro build && node scripts/verify-fixture-output.mjs",
     "verify:fixture-boundary": "npm run content:fixtures && node scripts/verify-public-fixture-boundary.mjs",

@@ -36,6 +36,7 @@ export function mountMascot(root: HTMLElement) {
 	}
 	const controller = createMascotController({
 		onFury: scheduleBrowserClosure,
+		readClosesAt: () => readBrowserClosure()?.closesAt ?? null,
 		onState(state) {
 			root.dataset.mood = state.mood;
 			caption.textContent = captions[state.mood];
